@@ -183,16 +183,56 @@ def _load_embedded() -> dict[str, pd.DataFrame | None]:
     }
 
 
+def _to_number(value: Any, default: float = 0.0) -> float:
+    """Coerce a CSV/JSON cell to a number, tolerating None, NaN and bad strings.
+
+    Returns ``default`` for missing or unparseable values so comparisons in the
+    analyzers never raise ``TypeError`` on mixed-type data.
+    """
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_bool(value: Any, default: bool = False) -> bool:
+    """Coerce a CSV/JSON cell to a bool.
+
+    pandas reads empty cells as ``NaN`` (which is truthy), so ``not value`` is an
+    unreliable test. This treats missing/unparseable values as ``default`` and
+    recognizes common truthy string spellings.
+    """
+    if isinstance(value, bool):
+        return value
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "y", "t")
+    return default
+
+
 def analyze_jobs(jobs_df, sessions_df, result):
     findings: list[str] = []
     if jobs_df is not None:
         for _, row in jobs_df.iterrows():
             name = row.get("Name", "<unknown>")
-            if row.get("RetentionCount", 0) < CONFIG.recommended_min_retention_count:
+            if _to_number(row.get("RetentionCount")) < CONFIG.recommended_min_retention_count:
                 findings.append(f"Job '{name}' has low retention count.")
-            if row.get("RetainDaysToKeep", 0) < CONFIG.recommended_retention_days:
+            if _to_number(row.get("RetainDaysToKeep")) < CONFIG.recommended_retention_days:
                 findings.append(f"Job '{name}' keeps restore points < recommended.")
-            if not row.get("StgEncryptionEnabled", False):
+            if not _to_bool(row.get("StgEncryptionEnabled")):
                 findings.append(f"Job '{name}' missing storage encryption.")
     if sessions_df is not None:
         try:
@@ -224,7 +264,7 @@ def analyze_repositories(repo_df, result):
         return findings
     for _, row in repo_df.iterrows():
         name = row.get("Name", "<unknown>")
-        if not row.get("IsImmutabilitySupported", False):
+        if not _to_bool(row.get("IsImmutabilitySupported")):
             findings.append(f"Repository '{name}' does not support immutability.")
     return findings
 
@@ -464,6 +504,27 @@ def _print_console_report(result: HealthCheckResult) -> None:
             print(f"- {k}: {v}")
 
 
+def _run_analyzer(name: str, func, result: HealthCheckResult, *args) -> list[str]:
+    """Run an analyzer, isolating failures so one bad section can't abort the run."""
+    try:
+        return func(*args)
+    except Exception as e:
+        msg = f"{name} analysis failed: {type(e).__name__}: {e}"
+        result.errors.append(msg)
+        logger.exception(msg)
+        return []
+
+
+def _write_artifact(result: HealthCheckResult, key: str, func, *args) -> None:
+    """Write an artifact, recording IO/serialization failures instead of crashing."""
+    try:
+        result.artifacts[key] = func(*args)
+    except Exception as e:
+        msg = f"Failed to write {key} artifact: {type(e).__name__}: {e}"
+        result.errors.append(msg)
+        logger.exception(msg)
+
+
 def run_healthcheck(
     input_dir: str | pathlib.Path = ".",
     output_dir: str | pathlib.Path = ".",
@@ -479,12 +540,26 @@ def run_healthcheck(
 ) -> dict[str, Any]:
     input_dir = pathlib.Path(input_dir)
     output_dir = pathlib.Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
     result = HealthCheckResult()
+
+    if write_artifacts:
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            msg = f"Cannot create output dir {output_dir}: {type(e).__name__}: {e}"
+            result.errors.append(msg)
+            logger.error(msg)
+            write_artifacts = False
 
     if demo:
         logger.info("Running in --demo mode with embedded sample data")
-        dfs = _load_embedded()
+        try:
+            dfs = _load_embedded()
+        except Exception as e:
+            msg = f"Failed to load embedded demo data: {type(e).__name__}: {e}"
+            result.errors.append(msg)
+            logger.exception(msg)
+            dfs = {}
     else:
         loader = _safe_load_json if input_format == "json" else _safe_load_csv
         dfs = {}
@@ -498,25 +573,36 @@ def run_healthcheck(
         logger.warning(msg)
 
     sections = {
-        "Backup Jobs": analyze_jobs(dfs.get("jobs"), dfs.get("sessions"), result),
-        "Security & Compliance": analyze_security(dfs.get("security"), result),
-        "Repositories": analyze_repositories(dfs.get("repositories"), result),
-        "Malware Events": analyze_malware(dfs.get("malware"), result),
+        "Backup Jobs": _run_analyzer(
+            "Backup Jobs", analyze_jobs, result, dfs.get("jobs"), dfs.get("sessions"), result
+        ),
+        "Security & Compliance": _run_analyzer(
+            "Security & Compliance", analyze_security, result, dfs.get("security"), result
+        ),
+        "Repositories": _run_analyzer(
+            "Repositories", analyze_repositories, result, dfs.get("repositories"), result
+        ),
+        "Malware Events": _run_analyzer(
+            "Malware Events", analyze_malware, result, dfs.get("malware"), result
+        ),
     }
     all_findings = [f for fl in sections.values() for f in fl]
     result.findings = all_findings
     result.sections = sections
-    result.enriched = enrich_findings(all_findings)
+    result.enriched = _run_analyzer("Enrichment", enrich_findings, result, all_findings)
 
     if write_artifacts and all_findings:
-        result.artifacts["markdown"] = write_markdown(
-            result.enriched, sections, output_dir / "remediation_summary.md"
+        _write_artifact(
+            result, "markdown", write_markdown,
+            result.enriched, sections, output_dir / "remediation_summary.md",
         )
-        result.artifacts["powershell"] = write_powershell_script(
-            result.enriched, output_dir / "fixit.ps1"
+        _write_artifact(
+            result, "powershell", write_powershell_script,
+            result.enriched, output_dir / "fixit.ps1",
         )
-        result.artifacts["tickets"] = write_ticket_payload(
-            result.enriched, output_dir / "tickets.json"
+        _write_artifact(
+            result, "tickets", write_ticket_payload,
+            result.enriched, output_dir / "tickets.json",
         )
 
     if sf_account_id and result.enriched:
