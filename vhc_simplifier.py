@@ -223,11 +223,29 @@ def _to_bool(value: Any, default: bool = False) -> bool:
     return default
 
 
+def _str_cell(value: Any, default: str = "<unknown>") -> str:
+    """Return a cell value as a non-NaN string, using default for missing/NaN."""
+    if value is None:
+        return default
+    try:
+        if pd.isna(value):
+            return default
+    except (TypeError, ValueError):
+        pass
+    s = str(value).strip()
+    return s if s else default
+
+
+def _row_name(row: Any, default: str = "<unknown>") -> str:
+    """Return the Name cell as a non-NaN string, falling back to default."""
+    return _str_cell(row.get("Name"), default)
+
+
 def analyze_jobs(jobs_df, sessions_df, result):
     findings: list[str] = []
     if jobs_df is not None:
         for _, row in jobs_df.iterrows():
-            name = row.get("Name", "<unknown>")
+            name = _row_name(row)
             if _to_number(row.get("RetentionCount")) < CONFIG.recommended_min_retention_count:
                 findings.append(f"Job '{name}' has low retention count.")
             if _to_number(row.get("RetainDaysToKeep")) < CONFIG.recommended_retention_days:
@@ -253,6 +271,13 @@ def analyze_security(sec_df, result):
         status = row.get("Status", "")
         if pd.isna(bp) or str(bp).strip() == "":
             continue
+        try:
+            if pd.isna(status):
+                continue
+        except (TypeError, ValueError):
+            pass
+        if str(status).strip() == "":
+            continue
         if status not in ("Passed", "Unable to detect"):
             findings.append(f"Security Best Practice NOT implemented: {bp} ({status})")
     return findings
@@ -263,7 +288,7 @@ def analyze_repositories(repo_df, result):
     if repo_df is None:
         return findings
     for _, row in repo_df.iterrows():
-        name = row.get("Name", "<unknown>")
+        name = _row_name(row)
         if not _to_bool(row.get("IsImmutabilitySupported")):
             findings.append(f"Repository '{name}' does not support immutability.")
     return findings
@@ -280,8 +305,8 @@ def analyze_malware(malware_df, result):
     )
     for _, row in malware_df[mask].iterrows():
         findings.append(
-            f"Malware event: {row.get('ObjectName', '<unknown>')} - "
-            f"{row.get('Status', '<unknown>')} at {row.get('DetectionTime', '<unknown>')}"
+            f"Malware event: {_str_cell(row.get('ObjectName'))} - "
+            f"{_str_cell(row.get('Status'))} at {_str_cell(row.get('DetectionTime'))}"
         )
     return findings
 
