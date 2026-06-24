@@ -464,6 +464,13 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
         result.errors.append(f"Salesforce error: {exc}")
 
 
+def _validate_slack_webhook(url: str) -> bool:
+    """Reject obviously invalid Slack webhook URLs before attempting network calls."""
+    if not isinstance(url, str):
+        return False
+    return url.startswith("https://hooks.slack.com/") or url.startswith("https://hooks.slack-gov.com/")
+
+
 def _post_slack_summary(enriched, webhook, result):
     high = sum(1 for e in enriched if e.get("severity") == "High")
     med = sum(1 for e in enriched if e.get("severity") == "Medium")
@@ -551,6 +558,12 @@ def run_healthcheck(
             logger.error(msg)
             write_artifacts = False
 
+    if input_format not in ("csv", "json"):
+        msg = f"Unsupported input format: {input_format!r}. Must be 'csv' or 'json'."
+        result.errors.append(msg)
+        logger.error(msg)
+        return result.to_dict()
+
     if demo:
         logger.info("Running in --demo mode with embedded sample data")
         try:
@@ -608,7 +621,10 @@ def run_healthcheck(
     if sf_account_id and result.enriched:
         _push_to_salesforce(result.enriched, sf_account_id, result, sf_username, sf_password, sf_token)
     if slack_webhook and result.enriched:
-        _post_slack_summary(result.enriched, slack_webhook, result)
+        if _validate_slack_webhook(slack_webhook):
+            _post_slack_summary(result.enriched, slack_webhook, result)
+        else:
+            result.errors.append(f"Invalid Slack webhook URL: {slack_webhook!r}")
     if verbose:
         _print_console_report(result)
     return result.to_dict()
@@ -630,19 +646,23 @@ def main() -> int:
     p.add_argument("--sf-token", default=None)
     p.add_argument("--slack-webhook", default=None)
     args = p.parse_args()
-    result = run_healthcheck(
-        input_dir=args.input_dir,
-        output_dir=args.output_dir,
-        write_artifacts=not args.no_artifacts,
-        verbose=not args.quiet,
-        input_format=args.input_format,
-        demo=args.demo,
-        sf_account_id=args.sf_account_id,
-        slack_webhook=args.slack_webhook,
-        sf_username=args.sf_username,
-        sf_password=args.sf_password,
-        sf_token=args.sf_token,
-    )
+    try:
+        result = run_healthcheck(
+            input_dir=args.input_dir,
+            output_dir=args.output_dir,
+            write_artifacts=not args.no_artifacts,
+            verbose=not args.quiet,
+            input_format=args.input_format,
+            demo=args.demo,
+            sf_account_id=args.sf_account_id,
+            slack_webhook=args.slack_webhook,
+            sf_username=args.sf_username,
+            sf_password=args.sf_password,
+            sf_token=args.sf_token,
+        )
+    except Exception as exc:
+        logger.critical("Unhandled error in run_healthcheck: %s", exc, exc_info=True)
+        return 1
     return 2 if result.get("errors") else 0
 
 
