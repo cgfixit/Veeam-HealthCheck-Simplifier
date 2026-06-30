@@ -16,7 +16,6 @@ import pandas as pd
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-import vhc_simplifier as vhc  # noqa: E402
 
 
 # ── VBR v12.3.2 (build 12.3.2.4643) realistic export data ──────────
@@ -169,10 +168,18 @@ def _write_json(tmp_path: pathlib.Path, version: str) -> pathlib.Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
     csv_sources = {
         "localhost_Jobs": VBR_V12_3_2_JOBS if version == "v12" else VBR_V13_JOBS,
-        "VeeamSessionReport": VBR_V12_3_2_SESSIONS if version == "v12" else VBR_V13_SESSIONS,
-        "localhost_SecurityCompliance": VBR_V12_3_2_SECURITY if version == "v12" else VBR_V13_SECURITY,
-        "localhost_Repositories": VBR_V12_3_2_REPOS if version == "v12" else VBR_V13_REPOS,
-        "localhostmalware_events": VBR_V12_3_2_MALWARE if version == "v12" else VBR_V13_MALWARE,
+        "VeeamSessionReport": VBR_V12_3_2_SESSIONS
+        if version == "v12"
+        else VBR_V13_SESSIONS,
+        "localhost_SecurityCompliance": VBR_V12_3_2_SECURITY
+        if version == "v12"
+        else VBR_V13_SECURITY,
+        "localhost_Repositories": VBR_V12_3_2_REPOS
+        if version == "v12"
+        else VBR_V13_REPOS,
+        "localhostmalware_events": VBR_V12_3_2_MALWARE
+        if version == "v12"
+        else VBR_V13_MALWARE,
     }
     for base, csv_text in csv_sources.items():
         df = pd.read_csv(io.StringIO(csv_text))

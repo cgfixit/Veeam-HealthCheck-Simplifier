@@ -5,7 +5,6 @@ Run with:  python -m pytest tests/ -v
 
 from __future__ import annotations
 
-import io
 import json
 import pathlib
 import sys
@@ -22,6 +21,7 @@ import vhc_simplifier as vhc  # noqa: E402
 # ------------------------------------
 # Type-coercion helpers
 # ------------------------------------
+
 
 @pytest.mark.parametrize(
     "value, expected",
@@ -68,6 +68,7 @@ def test_to_bool_coercion(value, expected):
 # PowerShell quoting / injection safety
 # ------------------------------------
 
+
 def test_ps_quote_escapes_single_quotes():
     assert vhc._ps_quote("O'Brien") == "'O''Brien'"
 
@@ -86,11 +87,19 @@ def test_find_unquoted_hash_ignores_quoted_hash():
 # Analyzers
 # ------------------------------------
 
+
 def test_analyze_jobs_flags_low_retention_and_encryption():
     jobs = pd.DataFrame(
-        [{"Name": "Job1", "RetentionCount": 3, "RetainDaysToKeep": 5, "StgEncryptionEnabled": False}]
+        [
+            {
+                "Name": "Job1",
+                "RetentionCount": 3,
+                "RetainDaysToKeep": 5,
+                "StgEncryptionEnabled": False,
+            }
+        ]
     )
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     findings = vhc.analyze_jobs(jobs, None)
     assert any("low retention count" in f for f in findings)
     assert any("restore points < recommended" in f for f in findings)
@@ -100,9 +109,16 @@ def test_analyze_jobs_flags_low_retention_and_encryption():
 def test_analyze_jobs_handles_string_and_missing_values():
     """Non-numeric / missing cells must not raise (the old code did)."""
     jobs = pd.DataFrame(
-        [{"Name": "Bad", "RetentionCount": "lots", "RetainDaysToKeep": None, "StgEncryptionEnabled": None}]
+        [
+            {
+                "Name": "Bad",
+                "RetentionCount": "lots",
+                "RetainDaysToKeep": None,
+                "StgEncryptionEnabled": None,
+            }
+        ]
     )
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     findings = vhc.analyze_jobs(jobs, None)  # must not raise
     assert any("low retention count" in f for f in findings)
     assert any("missing storage encryption" in f for f in findings)
@@ -110,15 +126,22 @@ def test_analyze_jobs_handles_string_and_missing_values():
 
 def test_analyze_jobs_compliant_job_has_no_findings():
     jobs = pd.DataFrame(
-        [{"Name": "Good", "RetentionCount": 30, "RetainDaysToKeep": 30, "StgEncryptionEnabled": True}]
+        [
+            {
+                "Name": "Good",
+                "RetentionCount": 30,
+                "RetainDaysToKeep": 30,
+                "StgEncryptionEnabled": True,
+            }
+        ]
     )
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     assert vhc.analyze_jobs(jobs, None) == []
 
 
 def test_analyze_jobs_detects_failed_sessions():
     sessions = pd.DataFrame([{"JobName": "JobX", "Status": "Failed"}])
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     findings = vhc.analyze_jobs(None, sessions)
     assert any("JobX" in f for f in findings)
 
@@ -131,7 +154,7 @@ def test_analyze_security_skips_passed_and_blank():
             {"Best Practice": "", "Status": "Not Implemented"},
         ]
     )
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     findings = vhc.analyze_security(sec)
     assert len(findings) == 1
     assert "MFA is enabled" in findings[0]
@@ -139,21 +162,23 @@ def test_analyze_security_skips_passed_and_blank():
 
 def test_analyze_repositories_flags_non_immutable():
     repos = pd.DataFrame([{"Name": "Pure", "IsImmutabilitySupported": False}])
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     findings = vhc.analyze_repositories(repos)
     assert any("does not support immutability" in f for f in findings)
 
 
 def test_analyze_malware_flags_infected_and_handles_missing_column():
-    malware = pd.DataFrame([{"ObjectName": "YARA", "Status": "Infected", "DetectionTime": "now"}])
-    result = vhc.HealthCheckResult()
+    malware = pd.DataFrame(
+        [{"ObjectName": "YARA", "Status": "Infected", "DetectionTime": "now"}]
+    )
+    vhc.HealthCheckResult()
     assert len(vhc.analyze_malware(malware)) == 1
     # Missing 'Status' column must be tolerated.
     assert vhc.analyze_malware(pd.DataFrame([{"ObjectName": "x"}])) == []
 
 
 def test_analyzers_return_empty_for_none():
-    result = vhc.HealthCheckResult()
+    vhc.HealthCheckResult()
     assert vhc.analyze_security(None) == []
     assert vhc.analyze_repositories(None) == []
     assert vhc.analyze_malware(None) == []
@@ -162,6 +187,7 @@ def test_analyzers_return_empty_for_none():
 # ------------------------------------
 # Loaders / exception handling
 # ------------------------------------
+
 
 def test_safe_load_csv_missing_file(tmp_path):
     result = vhc.HealthCheckResult()
@@ -197,6 +223,7 @@ def test_safe_load_json_malformed(tmp_path):
 # Enrichment
 # ------------------------------------
 
+
 def test_enrich_findings_maps_severity_and_dedupes():
     raw = [
         "Job 'Alpha' missing storage encryption.",
@@ -222,6 +249,7 @@ def test_enrich_findings_refuses_injection_in_object_name():
 # ------------------------------------
 # Artifact writers
 # ------------------------------------
+
 
 def test_write_powershell_adds_whatif_to_mutating(tmp_path):
     enriched = vhc.enrich_findings(["Job 'Alpha' missing storage encryption."])
@@ -252,6 +280,7 @@ def test_write_markdown_creates_file(tmp_path):
 # Resilience wrappers in run_healthcheck
 # ------------------------------------
 
+
 def test_run_analyzer_isolates_failures():
     result = vhc.HealthCheckResult()
 
@@ -276,6 +305,7 @@ def test_write_artifact_records_failure():
 # ------------------------------------
 # Integration: full run
 # ------------------------------------
+
 
 def test_run_healthcheck_demo_end_to_end(tmp_path):
     out = vhc.run_healthcheck(
@@ -318,4 +348,6 @@ def test_run_healthcheck_reads_csv_input(tmp_path):
         verbose=False,
         write_artifacts=False,
     )
-    assert any("retention" in f.lower() or "encryption" in f.lower() for f in out["findings"])
+    assert any(
+        "retention" in f.lower() or "encryption" in f.lower() for f in out["findings"]
+    )

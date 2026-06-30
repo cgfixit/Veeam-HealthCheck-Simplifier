@@ -28,17 +28,21 @@ from typing import Any
 
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
+)
 logger = logging.getLogger("vhc_simplifier")
 
 try:
     from simple_salesforce import Salesforce
+
     HAS_SF = True
 except ImportError:
     HAS_SF = False
 
 try:
     import httpx
+
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
@@ -138,7 +142,9 @@ class HealthCheckResult:
         }
 
 
-def _safe_load_csv(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
+def _safe_load_csv(
+    path: pathlib.Path, result: HealthCheckResult
+) -> pd.DataFrame | None:
     if not path.exists():
         result.missing_files.append(path.name)
         return None
@@ -155,7 +161,9 @@ def _safe_load_csv(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFram
         return None
 
 
-def _safe_load_json(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
+def _safe_load_json(
+    path: pathlib.Path, result: HealthCheckResult
+) -> pd.DataFrame | None:
     if not path.exists():
         result.missing_files.append(path.name)
         return None
@@ -249,17 +257,28 @@ def analyze_jobs(jobs_df, sessions_df):
     if jobs_df is not None:
         for _, row in jobs_df.iterrows():
             name = _row_name(row)
-            if _to_number(row.get("RetentionCount")) < CONFIG.recommended_min_retention_count:
+            if (
+                _to_number(row.get("RetentionCount"))
+                < CONFIG.recommended_min_retention_count
+            ):
                 findings.append(f"Job '{name}' has low retention count.")
-            if _to_number(row.get("RetainDaysToKeep")) < CONFIG.recommended_retention_days:
+            if (
+                _to_number(row.get("RetainDaysToKeep"))
+                < CONFIG.recommended_retention_days
+            ):
                 findings.append(f"Job '{name}' keeps restore points < recommended.")
             if not _to_bool(row.get("StgEncryptionEnabled")):
                 findings.append(f"Job '{name}' missing storage encryption.")
     if sessions_df is not None:
         try:
-            if "Status" not in sessions_df.columns or "JobName" not in sessions_df.columns:
+            if (
+                "Status" not in sessions_df.columns
+                or "JobName" not in sessions_df.columns
+            ):
                 return findings
-            failed = sessions_df[sessions_df["Status"].astype(str).str.lower() == "failed"]
+            failed = sessions_df[
+                sessions_df["Status"].astype(str).str.lower() == "failed"
+            ]
             for job in failed["JobName"].dropna().unique():
                 findings.append(f"Recent job session failure: '{_str_cell(job)}'.")
         except Exception:
@@ -305,8 +324,11 @@ def analyze_malware(malware_df):
         return findings
     if "Status" not in malware_df.columns:
         return findings
-    mask = malware_df["Status"].astype(str).str.lower().str.contains(
-        r"infected|suspicious", na=False, regex=True
+    mask = (
+        malware_df["Status"]
+        .astype(str)
+        .str.lower()
+        .str.contains(r"infected|suspicious", na=False, regex=True)
     )
     for _, row in malware_df[mask].iterrows():
         findings.append(
@@ -318,43 +340,50 @@ def analyze_malware(malware_df):
 
 PATTERN_MAP = {
     r"Job '(.+?)' missing storage encryption": {
-        "severity": "High", "category": "Job",
+        "severity": "High",
+        "category": "Job",
         "explain": "Enable at-rest encryption to protect backup data.",
         "cmd": "Set-VBRJobAdvancedStorageOptions -Job (Get-VBRJob -Name {0}) -EnableEncryption $true",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/encryption.html",
     },
     r"Job '(.+?)' has low retention count": {
-        "severity": "Medium", "category": "Job",
+        "severity": "Medium",
+        "category": "Job",
         "explain": "Increase restore-point retention.",
         "cmd": "# Set via VBR Console: Job Properties > Storage > Restore points to keep on disk",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
     },
     r"Job '(.+?)' keeps restore points < recommended": {
-        "severity": "Medium", "category": "Job",
+        "severity": "Medium",
+        "category": "Job",
         "explain": "Extend RetainDaysToKeep.",
         "cmd": "# Set via VBR Console: Job Properties > Storage > Retention Policy (GFS days)",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
     },
     r"Repository '(.+?)' does not support immutability": {
-        "severity": "High", "category": "Repository",
+        "severity": "High",
+        "category": "Repository",
         "explain": "Migrate to Hardened Linux Repository for ransomware resilience.",
         "cmd": "# Manual: Configure Hardened Linux Repository (see VBR v11+ docs)",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/hardened_repository.html",
     },
     r"Recent job session failure: '(.+?)'": {
-        "severity": "High", "category": "Job",
+        "severity": "High",
+        "category": "Job",
         "explain": "Investigate last sessions for root cause.",
         "cmd": "Get-VBRBackupSession -Name {0} | Sort-Object EndTime -Descending | Select-Object -First 5",
         "kb": "https://www.veeam.com/kb",
     },
     r"Security Best Practice NOT implemented: (.+?) \(": {
-        "severity": "High", "category": "Security",
+        "severity": "High",
+        "category": "Security",
         "explain": "Apply missing security control per Veeam Hardening Guide.",
         "cmd": "# See Veeam Hardening Guide for implementation steps",
         "kb": "https://bp.veeam.com/security/Design-and-implementation/Hardening/",
     },
     r"Malware event: (.+?) - ": {
-        "severity": "High", "category": "Malware",
+        "severity": "High",
+        "category": "Malware",
         "explain": "Triage immediately - isolate affected systems.",
         "cmd": "Get-VBRMalwareEvent | Sort-Object DetectionTime -Descending | Select-Object -First 10",
         "kb": "https://helpcenter.veeam.com/docs/backup/vsphere/malware_detection.html",
@@ -384,29 +413,44 @@ def enrich_findings(raw: list[str]) -> list[dict[str, Any]]:
                 quoted = _ps_quote(obj)
                 cmd_out = (
                     f"# REFUSED: control chars in object name: {obj!r}"
-                    if quoted is None else cmd_template.format(quoted)
+                    if quoted is None
+                    else cmd_template.format(quoted)
                 )
             else:
                 cmd_out = cmd_template
-            enriched.append({
-                "raw": line, "object": obj,
-                "severity": meta["severity"], "category": meta["category"],
-                "explain": meta["explain"], "kb": meta["kb"], "cmd": cmd_out,
-            })
+            enriched.append(
+                {
+                    "raw": line,
+                    "object": obj,
+                    "severity": meta["severity"],
+                    "category": meta["category"],
+                    "explain": meta["explain"],
+                    "kb": meta["kb"],
+                    "cmd": cmd_out,
+                }
+            )
             matched = True
             break
         if not matched:
-            enriched.append({
-                "raw": line, "object": "", "severity": "Info", "category": "General",
-                "explain": "No predefined remediation - review manually.", "kb": "", "cmd": "",
-            })
+            enriched.append(
+                {
+                    "raw": line,
+                    "object": "",
+                    "severity": "Info",
+                    "category": "General",
+                    "explain": "No predefined remediation - review manually.",
+                    "kb": "",
+                    "cmd": "",
+                }
+            )
     return enriched
 
 
 def write_markdown(enriched, sections, out_path):
     lines = [
         "# Veeam Health Check Remediation Summary",
-        f"*Generated: {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}*", "",
+        f"*Generated: {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}*",
+        "",
         "## Section Summary",
     ]
     for s, items in sections.items():
@@ -441,7 +485,11 @@ def write_powershell_script(enriched, out_path):
             continue
         if cmd.lstrip().startswith(_MUTATING_VERBS) and "-WhatIf" not in cmd:
             h = _find_unquoted_hash(cmd)
-            cmd = (f"{cmd[:h].rstrip()} -WhatIf  {cmd[h:]}" if h is not None else f"{cmd} -WhatIf")
+            cmd = (
+                f"{cmd[:h].rstrip()} -WhatIf  {cmd[h:]}"
+                if h is not None
+                else f"{cmd} -WhatIf"
+            )
         lines += [f"# {it['raw'].replace(chr(13), ' ').replace(chr(10), ' ')}", cmd, ""]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
@@ -456,13 +504,18 @@ def write_ticket_payload(enriched, out_path):
             "cmd": e["cmd"],
             "kb": e["kb"],
         }
-        for e in enriched if e["severity"] in ("High", "Medium")
+        for e in enriched
+        if e["severity"] in ("High", "Medium")
     ]
-    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
     return out_path
 
 
-def _push_to_salesforce(enriched, sf_account_id, result, username=None, password=None, token=None):
+def _push_to_salesforce(
+    enriched, sf_account_id, result, username=None, password=None, token=None
+):
     username = username or os.getenv("SF_USERNAME")
     password = password or os.getenv("SF_PASSWORD")
     token = token or os.getenv("SF_TOKEN")
@@ -480,13 +533,15 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
         for e in enriched:
             if e["severity"] not in ("High", "Medium"):
                 continue
-            sf.Task.create({
-                "Subject": e["raw"][:80],
-                "Description": f"{e['cmd']}\n\nKB: {e['kb']}",
-                "Priority": "High" if e["severity"] == "High" else "Normal",
-                "Status": "Not Started",
-                "WhatId": sf_account_id,
-            })
+            sf.Task.create(
+                {
+                    "Subject": e["raw"][:80],
+                    "Description": f"{e['cmd']}\n\nKB: {e['kb']}",
+                    "Priority": "High" if e["severity"] == "High" else "Normal",
+                    "Status": "Not Started",
+                    "WhatId": sf_account_id,
+                }
+            )
         logger.info("Salesforce push complete")
     except Exception as exc:
         result.errors.append(f"Salesforce error: {exc}")
@@ -496,7 +551,9 @@ def _validate_slack_webhook(url: str) -> bool:
     """Reject obviously invalid Slack webhook URLs before attempting network calls."""
     if not isinstance(url, str):
         return False
-    return url.startswith("https://hooks.slack.com/") or url.startswith("https://hooks.slack-gov.com/")
+    return url.startswith("https://hooks.slack.com/") or url.startswith(
+        "https://hooks.slack-gov.com/"
+    )
 
 
 def _post_slack_summary(enriched, webhook, result):
@@ -635,20 +692,32 @@ def run_healthcheck(
 
     if write_artifacts and all_findings:
         _write_artifact(
-            result, "markdown", write_markdown,
-            result.enriched, sections, output_dir / "remediation_summary.md",
+            result,
+            "markdown",
+            write_markdown,
+            result.enriched,
+            sections,
+            output_dir / "remediation_summary.md",
         )
         _write_artifact(
-            result, "powershell", write_powershell_script,
-            result.enriched, output_dir / "fixit.ps1",
+            result,
+            "powershell",
+            write_powershell_script,
+            result.enriched,
+            output_dir / "fixit.ps1",
         )
         _write_artifact(
-            result, "tickets", write_ticket_payload,
-            result.enriched, output_dir / "tickets.json",
+            result,
+            "tickets",
+            write_ticket_payload,
+            result.enriched,
+            output_dir / "tickets.json",
         )
 
     if sf_account_id and result.enriched:
-        _push_to_salesforce(result.enriched, sf_account_id, result, sf_username, sf_password, sf_token)
+        _push_to_salesforce(
+            result.enriched, sf_account_id, result, sf_username, sf_password, sf_token
+        )
     if slack_webhook and result.enriched:
         if _validate_slack_webhook(slack_webhook):
             _post_slack_summary(result.enriched, slack_webhook, result)
@@ -666,7 +735,9 @@ def main() -> int:
     p.add_argument("--input-dir", default=".", help="Directory with CSV/JSON files")
     p.add_argument("--output-dir", default=".", help="Where to write artifacts")
     p.add_argument("--input-format", choices=["csv", "json"], default="csv")
-    p.add_argument("--demo", action="store_true", help="Use embedded sample data (no files needed)")
+    p.add_argument(
+        "--demo", action="store_true", help="Use embedded sample data (no files needed)"
+    )
     p.add_argument("--no-artifacts", action="store_true")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--sf-account-id", default=None)

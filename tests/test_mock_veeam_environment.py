@@ -129,10 +129,18 @@ def _write_vbr_csvs(tmp_path: pathlib.Path, version: str) -> pathlib.Path:
     """Write a full set of mock VBR export CSVs into a temp directory."""
     data = {
         "localhost_Jobs.csv": VBR12_JOBS_CSV if version == "v12" else VBR13_JOBS_CSV,
-        "VeeamSessionReport.csv": VBR12_SESSIONS_CSV if version == "v12" else VBR13_SESSIONS_CSV,
-        "localhost_SecurityCompliance.csv": VBR12_SECURITY_CSV if version == "v12" else VBR13_SECURITY_CSV,
-        "localhost_Repositories.csv": VBR12_REPOS_CSV if version == "v12" else VBR13_REPOS_CSV,
-        "localhostmalware_events.csv": VBR12_MALWARE_CSV if version == "v12" else VBR13_MALWARE_CSV,
+        "VeeamSessionReport.csv": VBR12_SESSIONS_CSV
+        if version == "v12"
+        else VBR13_SESSIONS_CSV,
+        "localhost_SecurityCompliance.csv": VBR12_SECURITY_CSV
+        if version == "v12"
+        else VBR13_SECURITY_CSV,
+        "localhost_Repositories.csv": VBR12_REPOS_CSV
+        if version == "v12"
+        else VBR13_REPOS_CSV,
+        "localhostmalware_events.csv": VBR12_MALWARE_CSV
+        if version == "v12"
+        else VBR13_MALWARE_CSV,
     }
     for name, content in data.items():
         (tmp_path / name).write_text(content, encoding="utf-8")
@@ -143,10 +151,18 @@ def _write_vbr_json(tmp_path: pathlib.Path, version: str) -> pathlib.Path:
     """Write JSON equivalents of VBR exports (wrapped as {"data": [...]})."""
     csv_map = {
         "localhost_Jobs": VBR12_JOBS_CSV if version == "v12" else VBR13_JOBS_CSV,
-        "VeeamSessionReport": VBR12_SESSIONS_CSV if version == "v12" else VBR13_SESSIONS_CSV,
-        "localhost_SecurityCompliance": VBR12_SECURITY_CSV if version == "v12" else VBR13_SECURITY_CSV,
-        "localhost_Repositories": VBR12_REPOS_CSV if version == "v12" else VBR13_REPOS_CSV,
-        "localhostmalware_events": VBR12_MALWARE_CSV if version == "v12" else VBR13_MALWARE_CSV,
+        "VeeamSessionReport": VBR12_SESSIONS_CSV
+        if version == "v12"
+        else VBR13_SESSIONS_CSV,
+        "localhost_SecurityCompliance": VBR12_SECURITY_CSV
+        if version == "v12"
+        else VBR13_SECURITY_CSV,
+        "localhost_Repositories": VBR12_REPOS_CSV
+        if version == "v12"
+        else VBR13_REPOS_CSV,
+        "localhostmalware_events": VBR12_MALWARE_CSV
+        if version == "v12"
+        else VBR13_MALWARE_CSV,
     }
     for base, csv_text in csv_map.items():
         df = pd.read_csv(io.StringIO(csv_text))
@@ -160,6 +176,7 @@ def _write_vbr_json(tmp_path: pathlib.Path, version: str) -> pathlib.Path:
 # =====================================================================
 # VBR v12 tests
 # =====================================================================
+
 
 class TestVBRv12CSV:
     """Full analysis pipeline against mock VBR v12 CSV exports."""
@@ -176,17 +193,35 @@ class TestVBRv12CSV:
         )
 
     def test_detects_unencrypted_jobs(self, v12_result):
-        assert any("SQL-Cluster Backup" in f and "encryption" in f for f in v12_result["findings"])
-        assert any("File Server - Weekly" in f and "encryption" in f for f in v12_result["findings"])
-        assert any("Archive to Tape" in f and "encryption" in f for f in v12_result["findings"])
+        assert any(
+            "SQL-Cluster Backup" in f and "encryption" in f
+            for f in v12_result["findings"]
+        )
+        assert any(
+            "File Server - Weekly" in f and "encryption" in f
+            for f in v12_result["findings"]
+        )
+        assert any(
+            "Archive to Tape" in f and "encryption" in f for f in v12_result["findings"]
+        )
 
     def test_detects_low_retention(self, v12_result):
-        assert any("File Server - Weekly" in f and "low retention" in f for f in v12_result["findings"])
-        assert any("Archive to Tape" in f and "low retention" in f for f in v12_result["findings"])
+        assert any(
+            "File Server - Weekly" in f and "low retention" in f
+            for f in v12_result["findings"]
+        )
+        assert any(
+            "Archive to Tape" in f and "low retention" in f
+            for f in v12_result["findings"]
+        )
 
     def test_detects_failed_sessions(self, v12_result):
-        assert any("SQL-Cluster Backup" in f and "failure" in f for f in v12_result["findings"])
-        assert any("Archive to Tape" in f and "failure" in f for f in v12_result["findings"])
+        assert any(
+            "SQL-Cluster Backup" in f and "failure" in f for f in v12_result["findings"]
+        )
+        assert any(
+            "Archive to Tape" in f and "failure" in f for f in v12_result["findings"]
+        )
 
     def test_detects_security_gaps(self, v12_result):
         findings_text = " ".join(v12_result["findings"])
@@ -194,8 +229,13 @@ class TestVBRv12CSV:
         assert "Remote desktop" in findings_text or "RDP" in findings_text.upper()
 
     def test_detects_non_immutable_repos(self, v12_result):
-        assert any("Default Backup Repository" in f and "immutability" in f for f in v12_result["findings"])
-        assert any("NAS Share" in f and "immutability" in f for f in v12_result["findings"])
+        assert any(
+            "Default Backup Repository" in f and "immutability" in f
+            for f in v12_result["findings"]
+        )
+        assert any(
+            "NAS Share" in f and "immutability" in f for f in v12_result["findings"]
+        )
 
     def test_detects_malware_events(self, v12_result):
         assert any("YARA" in f and "Infected" in f for f in v12_result["findings"])
@@ -263,6 +303,7 @@ class TestVBRv12JSON:
 # VBR v13 tests — verifies extra columns are tolerated
 # =====================================================================
 
+
 class TestVBRv13CSV:
     """VBR v13 exports include extra columns the code must tolerate."""
 
@@ -287,11 +328,15 @@ class TestVBRv13CSV:
         assert any("NAS Backup" in f for f in v13_result["findings"])
 
     def test_v13_failed_sessions(self, v13_result):
-        assert any("SQL-Cluster Backup" in f and "failure" in f for f in v13_result["findings"])
+        assert any(
+            "SQL-Cluster Backup" in f and "failure" in f for f in v13_result["findings"]
+        )
         assert any("NAS Backup" in f and "failure" in f for f in v13_result["findings"])
 
     def test_v13_ml_malware_detection(self, v13_result):
-        assert any("AI-Anomaly" in f and "Suspicious" in f for f in v13_result["findings"])
+        assert any(
+            "AI-Anomaly" in f and "Suspicious" in f for f in v13_result["findings"]
+        )
 
 
 class TestVBRv13JSON:
@@ -318,8 +363,8 @@ class TestVBRv13JSON:
 # Version-compatibility edge cases
 # =====================================================================
 
-class TestVersionEdgeCases:
 
+class TestVersionEdgeCases:
     def test_mixed_version_columns_tolerated(self, tmp_path):
         """If a v13 export is missing a v12-only column, analysis still works."""
         jobs_csv = 'Name,RetentionCount,StgEncryptionEnabled\n"TestJob",3,False\n'
@@ -327,7 +372,9 @@ class TestVersionEdgeCases:
         out = vhc.run_healthcheck(
             input_dir=str(tmp_path),
             output_dir=str(tmp_path / "out"),
-            demo=False, verbose=False, write_artifacts=False,
+            demo=False,
+            verbose=False,
+            write_artifacts=False,
         )
         assert any("TestJob" in f for f in out["findings"])
 
@@ -338,7 +385,9 @@ class TestVersionEdgeCases:
         out = vhc.run_healthcheck(
             input_dir=str(tmp_path),
             output_dir=str(tmp_path / "out"),
-            demo=False, verbose=False, write_artifacts=True,
+            demo=False,
+            verbose=False,
+            write_artifacts=True,
         )
         assert out["findings"] == []
 
@@ -348,7 +397,9 @@ class TestVersionEdgeCases:
         out = vhc.run_healthcheck(
             input_dir=str(tmp_path),
             output_dir=str(tmp_path / "out"),
-            demo=False, verbose=False, write_artifacts=True,
+            demo=False,
+            verbose=False,
+            write_artifacts=True,
         )
         assert out["findings"], "should still find job issues"
         assert out["missing_files"], "should record the missing files"
