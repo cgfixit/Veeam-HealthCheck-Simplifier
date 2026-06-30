@@ -314,19 +314,19 @@ PATTERN_MAP = {
     r"Job '(.+?)' missing storage encryption": {
         "severity": "High", "category": "Job",
         "explain": "Enable at-rest encryption to protect backup data.",
-        "cmd": "Set-VBRJobEncryptionOptions -Job {0} -EnableEncryption $true",
+        "cmd": "Set-VBRJobAdvancedStorageOptions -Job (Get-VBRJob -Name {0}) -EnableEncryption $true",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/encryption.html",
     },
     r"Job '(.+?)' has low retention count": {
         "severity": "Medium", "category": "Job",
         "explain": "Increase restore-point retention.",
-        "cmd": "Set-VBRJob -Job {0} -RestorePoints 30  # adjust as needed",
+        "cmd": "# Set via VBR Console: Job Properties > Storage > Restore points to keep on disk",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
     },
     r"Job '(.+?)' keeps restore points < recommended": {
         "severity": "Medium", "category": "Job",
         "explain": "Extend RetainDaysToKeep.",
-        "cmd": "Set-VBRJob -Job {0}  # adjust RetainDaysToKeep via job settings",
+        "cmd": "# Set via VBR Console: Job Properties > Storage > Retention Policy (GFS days)",
         "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
     },
     r"Repository '(.+?)' does not support immutability": {
@@ -338,7 +338,7 @@ PATTERN_MAP = {
     r"Recent job session failure: '(.+?)'": {
         "severity": "High", "category": "Job",
         "explain": "Investigate last sessions for root cause.",
-        "cmd": "Get-VBRJob -Name {0} | Get-VBRTaskSession | Sort-Object EndTime -Descending | Select-Object -First 5",
+        "cmd": "Get-VBRBackupSession -Name {0} | Sort-Object EndTime -Descending | Select-Object -First 5",
         "kb": "https://www.veeam.com/kb",
     },
     r"Security Best Practice NOT implemented: (.+?) \(": {
@@ -350,7 +350,7 @@ PATTERN_MAP = {
     r"Malware event: (.+?) - ": {
         "severity": "High", "category": "Malware",
         "explain": "Triage immediately - isolate affected systems.",
-        "cmd": "Get-VBRMalwareDetectionEvent | Sort-Object DetectionTime -Descending | Select-Object -First 10",
+        "cmd": "Get-VBRMalwareEvent | Sort-Object DetectionTime -Descending | Select-Object -First 10",
         "kb": "https://helpcenter.veeam.com/docs/backup/vsphere/malware_detection.html",
     },
 }
