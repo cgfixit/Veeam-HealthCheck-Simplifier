@@ -1,0 +1,9 @@
+/var/log/vhc-simplifier/*.log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 vhc vhc
+}
