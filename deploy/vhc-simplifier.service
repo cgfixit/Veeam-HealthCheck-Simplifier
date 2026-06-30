@@ -1,0 +1,37 @@
+[Unit]
+Description=Veeam Health Check Simplifier
+Documentation=https://github.com/cgfixit/Veeam-HealthCheck-Simplifier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vhc
+Group=vhc
+EnvironmentFile=-/etc/vhc-simplifier/env
+ExecStart=/opt/vhc-simplifier/venv/bin/python /opt/vhc-simplifier/vhc_simplifier.py --input-dir /var/lib/vhc-simplifier/input --output-dir /var/lib/vhc-simplifier/output --quiet
+
+# Logging: append to a real log file (for logrotate) in addition to journald.
+LogsDirectory=vhc-simplifier
+StandardOutput=append:/var/log/vhc-simplifier/vhc-simplifier.log
+StandardError=append:/var/log/vhc-simplifier/vhc-simplifier.log
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/vhc-simplifier /var/log/vhc-simplifier
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

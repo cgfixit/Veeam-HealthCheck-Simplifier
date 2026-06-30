@@ -240,6 +240,18 @@ Six GitHub Actions workflows run on every push and pull request to `main`:
 
 ---
 
+## Deployment
+
+Two deployment options are available:
+
+- **Docker** — build and run via the included `Dockerfile`.
+- **Host-native (systemd)** — for operators who don't want Docker, `deploy/`
+  provides a `oneshot` systemd service, a daily calendar timer, and a
+  `logrotate` config for the log output. See [`deploy/README.md`](deploy/README.md)
+  for install instructions.
+
+---
+
 ## Architecture
 
 ```
