@@ -83,7 +83,7 @@ class TestAnalyzeJobsNaNName:
             "StgEncryptionEnabled": False,
         }])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_jobs(jobs, None, result)
+        findings = vhc.analyze_jobs(jobs, None)
         assert all("nan" not in f.lower().split("'")[1] for f in findings), \
             "NaN job name must not appear as the string 'nan' in findings"
         assert any("<unknown>" in f for f in findings)
@@ -91,18 +91,18 @@ class TestAnalyzeJobsNaNName:
     def test_session_missing_status_column_is_tolerated(self):
         sessions = pd.DataFrame([{"JobName": "X"}])  # no Status column
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_jobs(None, sessions, result)
+        findings = vhc.analyze_jobs(None, sessions)
         assert findings == []
 
     def test_session_with_warning_status_not_flagged(self):
         sessions = pd.DataFrame([{"JobName": "Job1", "Status": "Warning"}])
         result = vhc.HealthCheckResult()
-        assert vhc.analyze_jobs(None, sessions, result) == []
+        assert vhc.analyze_jobs(None, sessions) == []
 
     def test_session_status_case_insensitive(self):
         sessions = pd.DataFrame([{"JobName": "Job1", "Status": "FAILED"}])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_jobs(None, sessions, result)
+        findings = vhc.analyze_jobs(None, sessions)
         assert any("Job1" in f for f in findings)
 
 
@@ -117,18 +117,18 @@ class TestAnalyzeSecurityNaN:
             {"Best Practice": "MFA enabled", "Status": float("nan")},
         ])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_security(sec, result)
+        findings = vhc.analyze_security(sec)
         assert findings == [], "NaN Status must not be flagged as 'Not Implemented'"
 
     def test_empty_status_does_not_generate_finding(self):
         sec = pd.DataFrame([{"Best Practice": "MFA enabled", "Status": ""}])
         result = vhc.HealthCheckResult()
-        assert vhc.analyze_security(sec, result) == []
+        assert vhc.analyze_security(sec) == []
 
     def test_unable_to_detect_not_flagged(self):
         sec = pd.DataFrame([{"Best Practice": "MFA enabled", "Status": "Unable to detect"}])
         result = vhc.HealthCheckResult()
-        assert vhc.analyze_security(sec, result) == []
+        assert vhc.analyze_security(sec) == []
 
     def test_mixed_nan_and_real_status(self):
         sec = pd.DataFrame([
@@ -136,7 +136,7 @@ class TestAnalyzeSecurityNaN:
             {"Best Practice": "RDP disabled", "Status": "Not Implemented"},
         ])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_security(sec, result)
+        findings = vhc.analyze_security(sec)
         assert len(findings) == 1
         assert "RDP disabled" in findings[0]
 
@@ -154,7 +154,7 @@ class TestAnalyzeMalwareNaN:
             "DetectionTime": "2025-01-01",
         }])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_malware(malware, result)
+        findings = vhc.analyze_malware(malware)
         assert len(findings) == 1
         assert "nan" not in findings[0], "NaN ObjectName must not appear as 'nan' string"
         assert "<unknown>" in findings[0]
@@ -166,14 +166,14 @@ class TestAnalyzeMalwareNaN:
             "DetectionTime": float("nan"),
         }])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_malware(malware, result)
+        findings = vhc.analyze_malware(malware)
         assert len(findings) == 1
         assert "<unknown>" in findings[0]
 
     def test_clean_events_not_flagged(self):
         malware = pd.DataFrame([{"ObjectName": "Scan01", "Status": "Clean", "DetectionTime": "now"}])
         result = vhc.HealthCheckResult()
-        assert vhc.analyze_malware(malware, result) == []
+        assert vhc.analyze_malware(malware) == []
 
     def test_suspicious_and_infected_both_flagged(self):
         malware = pd.DataFrame([
@@ -182,7 +182,7 @@ class TestAnalyzeMalwareNaN:
             {"ObjectName": "C", "Status": "Clean", "DetectionTime": "t3"},
         ])
         result = vhc.HealthCheckResult()
-        findings = vhc.analyze_malware(malware, result)
+        findings = vhc.analyze_malware(malware)
         assert len(findings) == 2
 
 
@@ -193,7 +193,7 @@ class TestAnalyzeMalwareNaN:
 def test_analyze_repos_nan_name():
     repos = pd.DataFrame([{"Name": float("nan"), "IsImmutabilitySupported": False}])
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_repositories(repos, result)
+    findings = vhc.analyze_repositories(repos)
     assert any("<unknown>" in f for f in findings)
     assert not any("nan" in f.lower().replace("<unknown>", "") for f in findings)
 

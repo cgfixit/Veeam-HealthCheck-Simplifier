@@ -91,7 +91,7 @@ def test_analyze_jobs_flags_low_retention_and_encryption():
         [{"Name": "Job1", "RetentionCount": 3, "RetainDaysToKeep": 5, "StgEncryptionEnabled": False}]
     )
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_jobs(jobs, None, result)
+    findings = vhc.analyze_jobs(jobs, None)
     assert any("low retention count" in f for f in findings)
     assert any("restore points < recommended" in f for f in findings)
     assert any("missing storage encryption" in f for f in findings)
@@ -103,7 +103,7 @@ def test_analyze_jobs_handles_string_and_missing_values():
         [{"Name": "Bad", "RetentionCount": "lots", "RetainDaysToKeep": None, "StgEncryptionEnabled": None}]
     )
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_jobs(jobs, None, result)  # must not raise
+    findings = vhc.analyze_jobs(jobs, None)  # must not raise
     assert any("low retention count" in f for f in findings)
     assert any("missing storage encryption" in f for f in findings)
 
@@ -113,13 +113,13 @@ def test_analyze_jobs_compliant_job_has_no_findings():
         [{"Name": "Good", "RetentionCount": 30, "RetainDaysToKeep": 30, "StgEncryptionEnabled": True}]
     )
     result = vhc.HealthCheckResult()
-    assert vhc.analyze_jobs(jobs, None, result) == []
+    assert vhc.analyze_jobs(jobs, None) == []
 
 
 def test_analyze_jobs_detects_failed_sessions():
     sessions = pd.DataFrame([{"JobName": "JobX", "Status": "Failed"}])
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_jobs(None, sessions, result)
+    findings = vhc.analyze_jobs(None, sessions)
     assert any("JobX" in f for f in findings)
 
 
@@ -132,7 +132,7 @@ def test_analyze_security_skips_passed_and_blank():
         ]
     )
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_security(sec, result)
+    findings = vhc.analyze_security(sec)
     assert len(findings) == 1
     assert "MFA is enabled" in findings[0]
 
@@ -140,23 +140,23 @@ def test_analyze_security_skips_passed_and_blank():
 def test_analyze_repositories_flags_non_immutable():
     repos = pd.DataFrame([{"Name": "Pure", "IsImmutabilitySupported": False}])
     result = vhc.HealthCheckResult()
-    findings = vhc.analyze_repositories(repos, result)
+    findings = vhc.analyze_repositories(repos)
     assert any("does not support immutability" in f for f in findings)
 
 
 def test_analyze_malware_flags_infected_and_handles_missing_column():
     malware = pd.DataFrame([{"ObjectName": "YARA", "Status": "Infected", "DetectionTime": "now"}])
     result = vhc.HealthCheckResult()
-    assert len(vhc.analyze_malware(malware, result)) == 1
+    assert len(vhc.analyze_malware(malware)) == 1
     # Missing 'Status' column must be tolerated.
-    assert vhc.analyze_malware(pd.DataFrame([{"ObjectName": "x"}]), result) == []
+    assert vhc.analyze_malware(pd.DataFrame([{"ObjectName": "x"}])) == []
 
 
 def test_analyzers_return_empty_for_none():
     result = vhc.HealthCheckResult()
-    assert vhc.analyze_security(None, result) == []
-    assert vhc.analyze_repositories(None, result) == []
-    assert vhc.analyze_malware(None, result) == []
+    assert vhc.analyze_security(None) == []
+    assert vhc.analyze_repositories(None) == []
+    assert vhc.analyze_malware(None) == []
 
 
 # ------------------------------------
