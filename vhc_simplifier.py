@@ -645,6 +645,13 @@ def _redact(text: str, *secrets: str | None) -> str:
     return text
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse to follow redirects so an allowlisted host can't bounce us elsewhere."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
 def _post_slack_summary(enriched, webhook, result):
     high = sum(1 for e in enriched if e.get("severity") == "High")
     med = sum(1 for e in enriched if e.get("severity") == "Medium")
@@ -652,11 +659,12 @@ def _post_slack_summary(enriched, webhook, result):
     payload = json.dumps({"text": message}).encode()
     try:
         if HAS_HTTPX:
-            response = httpx.post(webhook, json={"text": message}, timeout=10)
+            response = httpx.post(webhook, json={"text": message}, timeout=10, follow_redirects=False)
             response.raise_for_status()
         else:
             req = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=10) as response:
+            opener = urllib.request.build_opener(_NoRedirectHandler)
+            with opener.open(req, timeout=10) as response:
                 status = getattr(response, "status", 200)
                 if isinstance(status, int) and status >= 400:
                     raise RuntimeError(f"Slack returned HTTP {status}")

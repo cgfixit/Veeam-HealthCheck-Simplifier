@@ -537,12 +537,12 @@ def test_slack_urllib_fallback(tmp_path):
     enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
     result = vhc.HealthCheckResult()
     with mock.patch.object(vhc, "HAS_HTTPX", False):
-        with mock.patch("urllib.request.urlopen") as mock_urlopen:
-            mock_urlopen.return_value.__enter__ = lambda s: s
-            mock_urlopen.return_value.__exit__ = mock.Mock(return_value=False)
+        with mock.patch("urllib.request.OpenerDirector.open") as mock_open:
+            mock_open.return_value.__enter__ = lambda s: s
+            mock_open.return_value.__exit__ = mock.Mock(return_value=False)
             vhc._post_slack_summary(enriched, "https://hooks.slack.com/T/B/x", result)
     assert not result.errors
-    mock_urlopen.assert_called_once()
+    mock_open.assert_called_once()
 
 
 def test_slack_httpx_failure_records_error():
@@ -823,7 +823,7 @@ class TestIntegrationEdgeCases:
         enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
         result = vhc.HealthCheckResult()
         with mock.patch.object(vhc, "HAS_HTTPX", False):
-            with mock.patch("urllib.request.urlopen", side_effect=ConnectionError("timeout")):
+            with mock.patch("urllib.request.OpenerDirector.open", side_effect=ConnectionError("timeout")):
                 vhc._post_slack_summary(enriched, "https://hooks.slack.com/T/B/x", result)
         assert any("Slack error" in e for e in result.errors)
 
