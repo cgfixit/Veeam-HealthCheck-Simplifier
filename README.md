@@ -138,6 +138,39 @@ python vhc_simplifier.py --input-dir ./vhc-exports --no-artifacts
 
 ---
 
+## Running in Docker
+
+```bash
+# Build the image
+docker build -t vhc-simplifier .
+
+# Run once (demo mode, same as the CI smoke test)
+docker run --rm vhc-simplifier --demo --quiet --no-artifacts
+
+# Run once against real exports
+docker run --rm \
+  -v $(pwd)/vhc-exports:/app/input:ro \
+  -v $(pwd)/output:/app/output \
+  vhc-simplifier --input-dir /app/input --output-dir /app/output
+```
+
+For recurring runs, set the `CRON_SCHEDULE` env var (standard 5-field cron syntax) and the
+container stays running in the foreground under `busybox crond`, re-invoking the CLI with
+whatever arguments you pass on each scheduled tick:
+
+```bash
+docker run -d --name vhc-simplifier \
+  -e CRON_SCHEDULE="0 6 * * *" \
+  -v $(pwd)/vhc-exports:/app/input:ro \
+  -v $(pwd)/output:/app/output \
+  vhc-simplifier --input-dir /app/input --output-dir /app/output
+```
+
+The container always runs as the non-root `vhc` user, including the cron process — there is no
+root cron daemon inside the image.
+
+---
+
 ## CLI Reference
 
 | Flag | Default | Description |
