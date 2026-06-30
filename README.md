@@ -283,6 +283,7 @@ Input (CSV / JSON / --demo)
 - **Review `-WhatIf` output before removing it.** Validate every command in a non-production environment first.
 - **Injection prevention.** Object names with ASCII control characters (`0x00-0x1F`, `0x7F`) are refused from PS command generation entirely.
 - **Slack webhook validation.** Only `https://hooks.slack.com/...` and `https://hooks.slack-gov.com/...` URLs are accepted.
+- **Service accounts & MFA.** Automation accounts used by this tool (Salesforce, Slack, and any scripted VBR REST API access) can't complete interactive MFA challenges — see [SECURITY.md](SECURITY.md#service-account--mfa-considerations) for guidance on scoping non-interactive credentials safely.
 
 ---
 
