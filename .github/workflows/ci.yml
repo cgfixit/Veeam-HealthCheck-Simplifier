@@ -47,10 +47,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
+          pip install --no-cache-dir ruff==0.15.20
+
+      - name: Show Ruff version
+        run: ruff version
 
       - name: Ruff lint check
         run: ruff check --output-format=github vhc_simplifier.py tests/
+
+      - name: Show format diff (diagnostic)
+        if: always()
+        run: ruff format --diff vhc_simplifier.py tests/ || true
 
       - name: Ruff format check
         run: ruff format --check vhc_simplifier.py tests/
