@@ -53,7 +53,7 @@ This project takes those raw exports and transforms them into actionable remedia
 
 ### Analysis Pipeline
 
-1. **Load** — `_safe_load_csv()` / `_safe_load_json()` with UTF-8 BOM stripping, encoding error replacement, and empty-file guards
+1. **Load** — `_safe_load_csv()` / `_safe_load_json()` with UTF-8 BOM stripping, Windows-oriented encoding fallback, corrupt-decode guards, and empty-file guards
 2. **Analyze** — fault-isolated analyzers (`_run_analyzer()` wrapper catches exceptions per-analyzer, never aborts the run):
    - `analyze_jobs()` — retention, encryption, schedule gaps
    - `analyze_sessions()` — recent failures and warnings
@@ -78,7 +78,7 @@ This project takes those raw exports and transforms them into actionable remedia
 - **Salesforce integration** — creates Tasks on an Account record for High/Medium findings
 - **Slack notifications** — posts a severity summary to an incoming webhook
 - **Graceful degradation** — missing input files are logged but never fatal; partial runs proceed; individual analyzer failures are recorded and skipped without aborting the run
-- **Robust encoding handling** — tolerates UTF-8 BOM (common from Windows PowerShell `Export-Csv`), UTF-16 LE fallback, and malformed bytes via `encoding_errors="replace"`
+- **Robust encoding handling** — tolerates UTF-8 BOM (common from Windows PowerShell `Export-Csv`), UTF-16 variants, and Windows code-page fallback while rejecting corrupt NUL-decoded files
 - **No secrets in code** — Salesforce credentials resolved from environment variables only
 
 ---
