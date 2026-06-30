@@ -21,7 +21,6 @@ import os
 import pathlib
 import re
 import sys
-import hashlib
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -369,9 +368,7 @@ def enrich_findings(raw: list[str]) -> list[dict[str, Any]]:
             if not m:
                 continue
             obj = m.group(1) if m.groups() else ""
-            dedup_key = hashlib.sha256(
-                f"{meta['severity']}|{meta['category']}|{obj}".encode()
-            ).hexdigest()
+            dedup_key = f"{meta['severity']}|{meta['category']}|{obj}"
             if dedup_key in seen:
                 matched = True
                 break
