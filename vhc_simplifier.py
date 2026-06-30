@@ -28,9 +28,7 @@ from typing import Any
 
 import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("vhc_simplifier")
 
 try:
@@ -187,9 +185,7 @@ def _json_records(data: Any) -> Any:
     return nested if nested is not None else [data]
 
 
-def _resolve_input_file(
-    input_dir: pathlib.Path, key: str, base: str, input_format: str
-) -> pathlib.Path:
+def _resolve_input_file(input_dir: pathlib.Path, key: str, base: str, input_format: str) -> pathlib.Path:
     exact = input_dir / f"{base}.{input_format}"
     if exact.exists() or not input_dir.is_dir():
         return exact
@@ -204,22 +200,16 @@ def _resolve_input_file(
             candidates.append(path)
         elif key == "sessions" and stem.endswith("sessionreport"):
             candidates.append(path)
-        elif key == "security" and (
-            stem == "securitycompliance" or stem.endswith("_securitycompliance")
-        ):
+        elif key == "security" and (stem == "securitycompliance" or stem.endswith("_securitycompliance")):
             candidates.append(path)
-        elif key == "repositories" and (
-            stem == "repositories" or stem.endswith("_repositories")
-        ):
+        elif key == "repositories" and (stem == "repositories" or stem.endswith("_repositories")):
             candidates.append(path)
         elif key == "malware" and stem.endswith("malware_events"):
             candidates.append(path)
     return sorted(candidates, key=lambda p: p.name.lower())[0] if candidates else exact
 
 
-def _safe_load_csv(
-    path: pathlib.Path, result: HealthCheckResult
-) -> pd.DataFrame | None:
+def _safe_load_csv(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
     if not path.exists():
         result.missing_files.append(path.name)
         return None
@@ -240,9 +230,7 @@ def _safe_load_csv(
     return None
 
 
-def _safe_load_json(
-    path: pathlib.Path, result: HealthCheckResult
-) -> pd.DataFrame | None:
+def _safe_load_json(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
     if not path.exists():
         result.missing_files.append(path.name)
         return None
@@ -365,28 +353,17 @@ def analyze_jobs(jobs_df, sessions_df):
     if jobs_df is not None:
         for _, row in jobs_df.iterrows():
             name = _row_name(row)
-            if (
-                _to_number(row.get("RetentionCount"))
-                < CONFIG.recommended_min_retention_count
-            ):
+            if _to_number(row.get("RetentionCount")) < CONFIG.recommended_min_retention_count:
                 findings.append(f"Job '{name}' has low retention count.")
-            if (
-                _to_number(row.get("RetainDaysToKeep"))
-                < CONFIG.recommended_retention_days
-            ):
+            if _to_number(row.get("RetainDaysToKeep")) < CONFIG.recommended_retention_days:
                 findings.append(f"Job '{name}' keeps restore points < recommended.")
             if not _to_bool(row.get("StgEncryptionEnabled")):
                 findings.append(f"Job '{name}' missing storage encryption.")
     if sessions_df is not None:
         try:
-            if (
-                "Status" not in sessions_df.columns
-                or "JobName" not in sessions_df.columns
-            ):
+            if "Status" not in sessions_df.columns or "JobName" not in sessions_df.columns:
                 return findings
-            failed = sessions_df[
-                sessions_df["Status"].astype(str).str.strip().str.casefold() == "failed"
-            ]
+            failed = sessions_df[sessions_df["Status"].astype(str).str.strip().str.casefold() == "failed"]
             for job in failed["JobName"].dropna().unique():
                 findings.append(f"Recent job session failure: '{_str_cell(job)}'.")
         except Exception:
@@ -414,9 +391,7 @@ def analyze_security(sec_df):
         if normalized_status == "":
             continue
         if normalized_status.casefold() not in ("passed", "unable to detect"):
-            findings.append(
-                f"Security Best Practice NOT implemented: {bp} ({normalized_status})"
-            )
+            findings.append(f"Security Best Practice NOT implemented: {bp} ({normalized_status})")
     return findings
 
 
@@ -600,11 +575,7 @@ def write_powershell_script(enriched, out_path):
             continue
         if cmd.lstrip().startswith(_MUTATING_VERBS) and "-WhatIf" not in cmd:
             h = _find_unquoted_hash(cmd)
-            cmd = (
-                f"{cmd[:h].rstrip()} -WhatIf  {cmd[h:]}"
-                if h is not None
-                else f"{cmd} -WhatIf"
-            )
+            cmd = f"{cmd[:h].rstrip()} -WhatIf  {cmd[h:]}" if h is not None else f"{cmd} -WhatIf"
         lines += [f"# {it['raw'].replace(chr(13), ' ').replace(chr(10), ' ')}", cmd, ""]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
@@ -622,15 +593,11 @@ def write_ticket_payload(enriched, out_path):
         for e in enriched
         if e["severity"] in ("High", "Medium")
     ]
-    out_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     return out_path
 
 
-def _push_to_salesforce(
-    enriched, sf_account_id, result, username=None, password=None, token=None
-):
+def _push_to_salesforce(enriched, sf_account_id, result, username=None, password=None, token=None):
     username = username or os.getenv("SF_USERNAME")
     password = password or os.getenv("SF_PASSWORD")
     token = token or os.getenv("SF_TOKEN")
@@ -659,9 +626,7 @@ def _push_to_salesforce(
             )
         logger.info("Salesforce push complete")
     except Exception as exc:
-        result.errors.append(
-            f"Salesforce error: {_redact(str(exc), username, password, token)}"
-        )
+        result.errors.append(f"Salesforce error: {_redact(str(exc), username, password, token)}")
 
 
 def _validate_slack_webhook(url: str) -> bool:
@@ -690,9 +655,7 @@ def _post_slack_summary(enriched, webhook, result):
             response = httpx.post(webhook, json={"text": message}, timeout=10)
             response.raise_for_status()
         else:
-            req = urllib.request.Request(
-                webhook, data=payload, headers={"Content-Type": "application/json"}
-            )
+            req = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=10) as response:
                 status = getattr(response, "status", 200)
                 if isinstance(status, int) and status >= 400:
@@ -807,12 +770,8 @@ def run_healthcheck(
         "Security & Compliance": _run_analyzer(
             "Security & Compliance", analyze_security, result, dfs.get("security")
         ),
-        "Repositories": _run_analyzer(
-            "Repositories", analyze_repositories, result, dfs.get("repositories")
-        ),
-        "Malware Events": _run_analyzer(
-            "Malware Events", analyze_malware, result, dfs.get("malware")
-        ),
+        "Repositories": _run_analyzer("Repositories", analyze_repositories, result, dfs.get("repositories")),
+        "Malware Events": _run_analyzer("Malware Events", analyze_malware, result, dfs.get("malware")),
     }
     all_findings = [f for fl in sections.values() for f in fl]
     result.findings = all_findings
@@ -844,9 +803,7 @@ def run_healthcheck(
         )
 
     if sf_account_id and result.enriched:
-        _push_to_salesforce(
-            result.enriched, sf_account_id, result, sf_username, sf_password, sf_token
-        )
+        _push_to_salesforce(result.enriched, sf_account_id, result, sf_username, sf_password, sf_token)
     if slack_webhook and result.enriched:
         if _validate_slack_webhook(slack_webhook):
             _post_slack_summary(result.enriched, slack_webhook, result)
@@ -864,9 +821,7 @@ def main() -> int:
     p.add_argument("--input-dir", default=".", help="Directory with CSV/JSON files")
     p.add_argument("--output-dir", default=".", help="Where to write artifacts")
     p.add_argument("--input-format", choices=["csv", "json"], default="csv")
-    p.add_argument(
-        "--demo", action="store_true", help="Use embedded sample data (no files needed)"
-    )
+    p.add_argument("--demo", action="store_true", help="Use embedded sample data (no files needed)")
     p.add_argument("--no-artifacts", action="store_true")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--sf-account-id", default=None)

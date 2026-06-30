@@ -17,7 +17,6 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import vhc_simplifier as vhc  # noqa: E402
 
-
 # =====================================================================
 # _str_cell and _row_name helpers (new in this pass)
 # =====================================================================
@@ -131,9 +130,7 @@ class TestAnalyzeSecurityNaN:
         assert vhc.analyze_security(sec) == []
 
     def test_unable_to_detect_not_flagged(self):
-        sec = pd.DataFrame(
-            [{"Best Practice": "MFA enabled", "Status": "Unable to detect"}]
-        )
+        sec = pd.DataFrame([{"Best Practice": "MFA enabled", "Status": "Unable to detect"}])
         vhc.HealthCheckResult()
         assert vhc.analyze_security(sec) == []
 
@@ -169,9 +166,7 @@ class TestAnalyzeMalwareNaN:
         vhc.HealthCheckResult()
         findings = vhc.analyze_malware(malware)
         assert len(findings) == 1
-        assert "nan" not in findings[0], (
-            "NaN ObjectName must not appear as 'nan' string"
-        )
+        assert "nan" not in findings[0], "NaN ObjectName must not appear as 'nan' string"
         assert "<unknown>" in findings[0]
 
     def test_nan_detection_time_becomes_unknown(self):
@@ -190,9 +185,7 @@ class TestAnalyzeMalwareNaN:
         assert "<unknown>" in findings[0]
 
     def test_clean_events_not_flagged(self):
-        malware = pd.DataFrame(
-            [{"ObjectName": "Scan01", "Status": "Clean", "DetectionTime": "now"}]
-        )
+        malware = pd.DataFrame([{"ObjectName": "Scan01", "Status": "Clean", "DetectionTime": "now"}])
         vhc.HealthCheckResult()
         assert vhc.analyze_malware(malware) == []
 
@@ -279,9 +272,7 @@ class TestLoadEmbedded:
     def test_all_dataframes_non_empty(self):
         dfs = vhc._load_embedded()
         for key, df in dfs.items():
-            assert df is not None and len(df) > 0, (
-                f"Embedded '{key}' DataFrame is empty"
-            )
+            assert df is not None and len(df) > 0, f"Embedded '{key}' DataFrame is empty"
 
     def test_jobs_has_expected_columns(self):
         dfs = vhc._load_embedded()
@@ -358,12 +349,8 @@ class TestEnrichFindingsEdgeCases:
         ]
         for finding, expected_sev, expected_cat in test_inputs:
             enriched = vhc.enrich_findings([finding])
-            assert enriched[0]["severity"] == expected_sev, (
-                f"Wrong severity for: {finding}"
-            )
-            assert enriched[0]["category"] == expected_cat, (
-                f"Wrong category for: {finding}"
-            )
+            assert enriched[0]["severity"] == expected_sev, f"Wrong severity for: {finding}"
+            assert enriched[0]["category"] == expected_cat, f"Wrong category for: {finding}"
 
     def test_multiple_different_patterns_all_kept(self):
         findings = [
@@ -486,9 +473,7 @@ class TestWriteTicketPayload:
             assert len(payload[0]["short_description"]) <= 250
 
     def test_info_severity_excluded(self, tmp_path):
-        enriched = [
-            {"raw": "x", "severity": "Info", "category": "General", "cmd": "", "kb": ""}
-        ]
+        enriched = [{"raw": "x", "severity": "Info", "category": "General", "cmd": "", "kb": ""}]
         out = vhc.write_ticket_payload(enriched, tmp_path / "tickets.json")
         payload = json.loads(out.read_text())
         assert payload == []
@@ -569,9 +554,7 @@ def test_slack_httpx_failure_records_error():
     mock_httpx.post.return_value = response
     with mock.patch.object(vhc, "HAS_HTTPX", True):
         with mock.patch.dict(vhc.__dict__, {"httpx": mock_httpx}):
-            vhc._post_slack_summary(
-                enriched, "https://hooks.slack.com/services/T/B/x", result
-            )
+            vhc._post_slack_summary(enriched, "https://hooks.slack.com/services/T/B/x", result)
     assert any("Slack error" in e for e in result.errors)
 
 
@@ -610,9 +593,7 @@ def test_print_console_report_artifacts(capsys, tmp_path):
 
 class TestVBRVersionParity:
     VBR12_JOBS = (
-        "Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"
-        '"JobA",3,7,False\n'
-        '"JobB",30,30,True\n'
+        'Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"JobA",3,7,False\n"JobB",30,30,True\n'
     )
     VBR13_JOBS = (
         "Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled,ObjectStorageTier\n"
@@ -718,9 +699,7 @@ class TestAnalyzeJobsSessionsException:
 
 class TestAnalyzeSecurityIsnaException:
     def test_status_that_makes_isna_raise(self):
-        sec = pd.DataFrame(
-            [{"Best Practice": "MFA enabled", "Status": _BadArrayValue()}]
-        )
+        sec = pd.DataFrame([{"Best Practice": "MFA enabled", "Status": _BadArrayValue()}])
         findings = vhc.analyze_security(sec)
         assert len(findings) == 1
 
@@ -815,9 +794,7 @@ class TestOutputDirFailure:
         assert any("Cannot create output dir" in e for e in out["errors"])
 
     def test_embedded_load_failure_captured(self):
-        with mock.patch(
-            "vhc_simplifier._load_embedded", side_effect=RuntimeError("boom")
-        ):
+        with mock.patch("vhc_simplifier._load_embedded", side_effect=RuntimeError("boom")):
             out = vhc.run_healthcheck(
                 demo=True,
                 verbose=False,
@@ -838,9 +815,7 @@ class TestIntegrationEdgeCases:
         mock_httpx = mock.MagicMock()
         with mock.patch.object(vhc, "HAS_HTTPX", True):
             with mock.patch.dict(vhc.__dict__, {"httpx": mock_httpx}):
-                vhc._post_slack_summary(
-                    enriched, "https://hooks.slack.com/T/B/x", result
-                )
+                vhc._post_slack_summary(enriched, "https://hooks.slack.com/T/B/x", result)
         mock_httpx.post.assert_called_once()
         assert not result.errors
 
@@ -848,12 +823,8 @@ class TestIntegrationEdgeCases:
         enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
         result = vhc.HealthCheckResult()
         with mock.patch.object(vhc, "HAS_HTTPX", False):
-            with mock.patch(
-                "urllib.request.urlopen", side_effect=ConnectionError("timeout")
-            ):
-                vhc._post_slack_summary(
-                    enriched, "https://hooks.slack.com/T/B/x", result
-                )
+            with mock.patch("urllib.request.urlopen", side_effect=ConnectionError("timeout")):
+                vhc._post_slack_summary(enriched, "https://hooks.slack.com/T/B/x", result)
         assert any("Slack error" in e for e in result.errors)
 
     def test_salesforce_api_error_captured(self):

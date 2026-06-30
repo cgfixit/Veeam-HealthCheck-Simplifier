@@ -22,7 +22,6 @@ import pandas as pd
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import vhc_simplifier as vhc  # noqa: E402
 
-
 # =====================================================================
 # VBR v12.3.2 — full pipeline (CSV)
 # =====================================================================
@@ -65,12 +64,8 @@ class TestVBRv12SimulationCSV:
             verbose=False,
             write_artifacts=False,
         )
-        assert any(
-            "SQL-Cluster-PROD" in f and "encryption" in f for f in out["findings"]
-        )
-        assert any(
-            "FileServer-Weekly-GFS" in f and "encryption" in f for f in out["findings"]
-        )
+        assert any("SQL-Cluster-PROD" in f and "encryption" in f for f in out["findings"])
+        assert any("FileServer-Weekly-GFS" in f and "encryption" in f for f in out["findings"])
 
     def test_low_retention_detected(self, vbr_v12_csv_dir, tmp_path):
         out = vhc.run_healthcheck(
@@ -80,14 +75,8 @@ class TestVBRv12SimulationCSV:
             verbose=False,
             write_artifacts=False,
         )
-        assert any(
-            "FileServer-Weekly-GFS" in f and "low retention" in f
-            for f in out["findings"]
-        )
-        assert any(
-            "Tape Archive - Monthly" in f and "low retention" in f
-            for f in out["findings"]
-        )
+        assert any("FileServer-Weekly-GFS" in f and "low retention" in f for f in out["findings"])
+        assert any("Tape Archive - Monthly" in f and "low retention" in f for f in out["findings"])
 
     def test_failed_sessions_detected(self, vbr_v12_csv_dir, tmp_path):
         out = vhc.run_healthcheck(
@@ -98,12 +87,8 @@ class TestVBRv12SimulationCSV:
             write_artifacts=False,
         )
         assert any("SQL-Cluster-PROD" in f and "failure" in f for f in out["findings"])
-        assert any(
-            "Tape Archive - Monthly" in f and "failure" in f for f in out["findings"]
-        )
-        assert any(
-            "Exchange-DAG-Backup" in f and "failure" in f for f in out["findings"]
-        )
+        assert any("Tape Archive - Monthly" in f and "failure" in f for f in out["findings"])
+        assert any("Exchange-DAG-Backup" in f and "failure" in f for f in out["findings"])
 
     def test_security_gaps_identified(self, vbr_v12_csv_dir, tmp_path):
         out = vhc.run_healthcheck(
@@ -168,13 +153,10 @@ class TestVBRv12SimulationCSV:
         )
         jobs = out["sections"]["Backup Jobs"]
         assert not any(
-            "DC01 - Domain Controllers" in f
-            and ("encryption" in f or "low retention" in f)
-            for f in jobs
+            "DC01 - Domain Controllers" in f and ("encryption" in f or "low retention" in f) for f in jobs
         )
         assert not any(
-            "Oracle-DB-Critical" in f and ("encryption" in f or "low retention" in f)
-            for f in jobs
+            "Oracle-DB-Critical" in f and ("encryption" in f or "low retention" in f) for f in jobs
         )
 
     def test_artifacts_generated(self, vbr_v12_csv_dir, tmp_path):
@@ -210,10 +192,7 @@ class TestVBRv12SimulationCSV:
             write_artifacts=True,
         )
         ps_text = (tmp_path / "fixit.ps1").read_text()
-        assert (
-            "Set-VBRJobAdvancedStorageOptions" in ps_text
-            or "Get-VBRBackupSession" in ps_text
-        )
+        assert "Set-VBRJobAdvancedStorageOptions" in ps_text or "Get-VBRBackupSession" in ps_text
 
     def test_no_errors_on_clean_data(self, vbr_v12_csv_dir, tmp_path):
         out = vhc.run_healthcheck(
@@ -327,9 +306,9 @@ class TestVBRv13SimulationCSV:
             write_artifacts=False,
         )
         jobs = out["sections"]["Backup Jobs"]
-        assert not any(
-            "Kubernetes-Cluster-01" in f and "encryption" in f for f in jobs
-        ), "K8s job has encryption enabled — should not be flagged"
+        assert not any("Kubernetes-Cluster-01" in f and "encryption" in f for f in jobs), (
+            "K8s job has encryption enabled — should not be flagged"
+        )
 
     def test_v13_m365_job_analyzed(self, vbr_v13_csv_dir, tmp_path):
         out = vhc.run_healthcheck(
@@ -340,9 +319,9 @@ class TestVBRv13SimulationCSV:
             write_artifacts=False,
         )
         jobs = out["sections"]["Backup Jobs"]
-        assert not any(
-            "M365-Exchange-Online" in f and "encryption" in f for f in jobs
-        ), "M365 job has encryption — should not be flagged"
+        assert not any("M365-Exchange-Online" in f and "encryption" in f for f in jobs), (
+            "M365 job has encryption — should not be flagged"
+        )
 
     def test_v13_cdp_job_zero_retention(self, vbr_v13_csv_dir, tmp_path):
         """CDP jobs have 0 retention (continuous) — flagged as low retention."""
@@ -461,9 +440,7 @@ class TestVBRv13SimulationJSON:
 class TestCrossVersionComparison:
     """Compare v12 and v13 pipeline behavior to catch regressions."""
 
-    def test_v12_v13_both_produce_findings(
-        self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path
-    ):
+    def test_v12_v13_both_produce_findings(self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path):
         v12 = vhc.run_healthcheck(
             input_dir=str(vbr_v12_csv_dir),
             output_dir=str(tmp_path / "v12"),
@@ -481,9 +458,7 @@ class TestCrossVersionComparison:
         assert v12["findings"]
         assert v13["findings"]
 
-    def test_v12_v13_same_section_keys(
-        self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path
-    ):
+    def test_v12_v13_same_section_keys(self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path):
         v12 = vhc.run_healthcheck(
             input_dir=str(vbr_v12_csv_dir),
             output_dir=str(tmp_path / "v12"),
@@ -500,9 +475,7 @@ class TestCrossVersionComparison:
         )
         assert set(v12["sections"].keys()) == set(v13["sections"].keys())
 
-    def test_v13_has_more_security_findings(
-        self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path
-    ):
+    def test_v13_has_more_security_findings(self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path):
         """v13 adds Four-eyes and gMSA checks — should have more security findings."""
         v12 = vhc.run_healthcheck(
             input_dir=str(vbr_v12_csv_dir),
@@ -522,9 +495,7 @@ class TestCrossVersionComparison:
         v13_sec = len(v13["sections"]["Security & Compliance"])
         assert v13_sec >= v12_sec
 
-    def test_neither_version_has_errors(
-        self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path
-    ):
+    def test_neither_version_has_errors(self, vbr_v12_csv_dir, vbr_v13_csv_dir, tmp_path):
         for label, d in [("v12", vbr_v12_csv_dir), ("v13", vbr_v13_csv_dir)]:
             out = vhc.run_healthcheck(
                 input_dir=str(d),
@@ -533,12 +504,8 @@ class TestCrossVersionComparison:
                 verbose=False,
                 write_artifacts=True,
             )
-            assert not out["errors"], (
-                f"{label} produced unexpected errors: {out['errors']}"
-            )
-            assert not out["missing_files"], (
-                f"{label} had missing files: {out['missing_files']}"
-            )
+            assert not out["errors"], f"{label} produced unexpected errors: {out['errors']}"
+            assert not out["missing_files"], f"{label} had missing files: {out['missing_files']}"
 
 
 # =====================================================================
@@ -555,9 +522,7 @@ class TestPartialExports:
         partial.mkdir()
         import shutil
 
-        shutil.copy(
-            vbr_v12_csv_dir / "localhost_Jobs.csv", partial / "localhost_Jobs.csv"
-        )
+        shutil.copy(vbr_v12_csv_dir / "localhost_Jobs.csv", partial / "localhost_Jobs.csv")
         out = vhc.run_healthcheck(
             input_dir=str(partial),
             output_dir=str(tmp_path / "out"),
@@ -587,15 +552,11 @@ class TestPartialExports:
         """Files with headers but no data rows — should produce zero findings."""
         d = tmp_path / "headers"
         d.mkdir()
-        (d / "localhost_Jobs.csv").write_text(
-            "Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"
-        )
+        (d / "localhost_Jobs.csv").write_text("Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n")
         (d / "VeeamSessionReport.csv").write_text("JobName,Status\n")
         (d / "localhost_SecurityCompliance.csv").write_text("Best Practice,Status\n")
         (d / "localhost_Repositories.csv").write_text("Name,IsImmutabilitySupported\n")
-        (d / "localhostmalware_events.csv").write_text(
-            "ObjectName,Status,DetectionTime\n"
-        )
+        (d / "localhostmalware_events.csv").write_text("ObjectName,Status,DetectionTime\n")
         out = vhc.run_healthcheck(
             input_dir=str(d),
             output_dir=str(tmp_path / "out"),
@@ -610,9 +571,7 @@ class TestPartialExports:
         d = tmp_path / "corrupt"
         d.mkdir()
         (d / "localhost_Jobs.csv").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
-        (d / "localhost_Repositories.csv").write_text(
-            'Name,IsImmutabilitySupported\n"TestRepo",False\n'
-        )
+        (d / "localhost_Repositories.csv").write_text('Name,IsImmutabilitySupported\n"TestRepo",False\n')
         out = vhc.run_healthcheck(
             input_dir=str(d),
             output_dir=str(tmp_path / "out"),
@@ -695,12 +654,8 @@ class TestVHCEncodingEdgeCases:
 
 
 class TestAnalyzerIsolation:
-    def test_jobs_analyzer_failure_does_not_block_others(
-        self, vbr_v12_csv_dir, tmp_path
-    ):
-        with mock.patch(
-            "vhc_simplifier.analyze_jobs", side_effect=RuntimeError("boom")
-        ):
+    def test_jobs_analyzer_failure_does_not_block_others(self, vbr_v12_csv_dir, tmp_path):
+        with mock.patch("vhc_simplifier.analyze_jobs", side_effect=RuntimeError("boom")):
             out = vhc.run_healthcheck(
                 input_dir=str(vbr_v12_csv_dir),
                 output_dir=str(tmp_path),
@@ -713,9 +668,7 @@ class TestAnalyzerIsolation:
         assert out["sections"]["Malware Events"]
 
     def test_security_analyzer_failure_isolated(self, vbr_v13_csv_dir, tmp_path):
-        with mock.patch(
-            "vhc_simplifier.analyze_security", side_effect=ValueError("bad")
-        ):
+        with mock.patch("vhc_simplifier.analyze_security", side_effect=ValueError("bad")):
             out = vhc.run_healthcheck(
                 input_dir=str(vbr_v13_csv_dir),
                 output_dir=str(tmp_path),
@@ -727,9 +680,7 @@ class TestAnalyzerIsolation:
         assert out["sections"]["Backup Jobs"]
 
     def test_malware_analyzer_failure_isolated(self, vbr_v12_csv_dir, tmp_path):
-        with mock.patch(
-            "vhc_simplifier.analyze_malware", side_effect=TypeError("oops")
-        ):
+        with mock.patch("vhc_simplifier.analyze_malware", side_effect=TypeError("oops")):
             out = vhc.run_healthcheck(
                 input_dir=str(vbr_v12_csv_dir),
                 output_dir=str(tmp_path),
@@ -750,9 +701,7 @@ class TestAnalyzerIsolation:
 class TestArtifactWriteFailures:
     def test_readonly_output_dir_captures_errors(self, vbr_v12_csv_dir, tmp_path):
         """If output directory is unwritable, errors are captured not raised."""
-        with mock.patch(
-            "vhc_simplifier.write_markdown", side_effect=PermissionError("denied")
-        ):
+        with mock.patch("vhc_simplifier.write_markdown", side_effect=PermissionError("denied")):
             out = vhc.run_healthcheck(
                 input_dir=str(vbr_v12_csv_dir),
                 output_dir=str(tmp_path),
@@ -764,9 +713,7 @@ class TestArtifactWriteFailures:
         assert out["findings"], "findings should still be present"
 
     def test_ps1_write_failure_isolated(self, vbr_v13_csv_dir, tmp_path):
-        with mock.patch(
-            "vhc_simplifier.write_powershell_script", side_effect=OSError("full")
-        ):
+        with mock.patch("vhc_simplifier.write_powershell_script", side_effect=OSError("full")):
             out = vhc.run_healthcheck(
                 input_dir=str(vbr_v13_csv_dir),
                 output_dir=str(tmp_path),
@@ -823,9 +770,7 @@ class TestDirectAnalyzersV12:
         findings = vhc.analyze_jobs(jobs, sessions)
         assert len(findings) > 0
         encryption_findings = [f for f in findings if "encryption" in f]
-        retention_findings = [
-            f for f in findings if "retention" in f.lower() or "restore points" in f
-        ]
+        retention_findings = [f for f in findings if "retention" in f.lower() or "restore points" in f]
         failure_findings = [f for f in findings if "failure" in f]
         assert len(encryption_findings) >= 3
         assert len(retention_findings) >= 2

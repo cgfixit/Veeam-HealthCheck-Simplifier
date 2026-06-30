@@ -17,7 +17,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import vhc_simplifier as vhc  # noqa: E402
 
-
 # ------------------------------------
 # Type-coercion helpers
 # ------------------------------------
@@ -188,9 +187,7 @@ def test_analyze_repositories_flags_non_immutable():
 
 
 def test_analyze_malware_flags_infected_and_handles_missing_column():
-    malware = pd.DataFrame(
-        [{"ObjectName": "YARA", "Status": "Infected", "DetectionTime": "now"}]
-    )
+    malware = pd.DataFrame([{"ObjectName": "YARA", "Status": "Infected", "DetectionTime": "now"}])
     vhc.HealthCheckResult()
     assert len(vhc.analyze_malware(malware)) == 1
     # Missing 'Status' column must be tolerated.
@@ -279,9 +276,7 @@ def test_write_powershell_adds_whatif_to_mutating(tmp_path):
 
 
 def test_write_ticket_payload_only_high_medium(tmp_path):
-    enriched = vhc.enrich_findings(
-        ["Job 'Alpha' missing storage encryption.", "unknown info-level line"]
-    )
+    enriched = vhc.enrich_findings(["Job 'Alpha' missing storage encryption.", "unknown info-level line"])
     out = vhc.write_ticket_payload(enriched, tmp_path / "tickets.json")
     payload = json.loads(out.read_text())
     assert len(payload) == 1
@@ -328,9 +323,7 @@ def test_write_artifact_records_failure():
 
 
 def test_run_healthcheck_demo_end_to_end(tmp_path):
-    out = vhc.run_healthcheck(
-        output_dir=str(tmp_path), demo=True, verbose=False, write_artifacts=True
-    )
+    out = vhc.run_healthcheck(output_dir=str(tmp_path), demo=True, verbose=False, write_artifacts=True)
     assert out["findings"], "demo data should yield findings"
     # Demo embeds malware + missing MFA + non-immutable repo + failed session.
     assert any("Malware" in f for f in out["findings"])
@@ -352,9 +345,7 @@ def test_run_healthcheck_missing_files_graceful(tmp_path):
 
 
 def test_run_healthcheck_no_artifacts_flag(tmp_path):
-    out = vhc.run_healthcheck(
-        output_dir=str(tmp_path), demo=True, verbose=False, write_artifacts=False
-    )
+    out = vhc.run_healthcheck(output_dir=str(tmp_path), demo=True, verbose=False, write_artifacts=False)
     assert out["artifacts"] == {}
     assert not (tmp_path / "remediation_summary.md").exists()
 
@@ -368,6 +359,4 @@ def test_run_healthcheck_reads_csv_input(tmp_path):
         verbose=False,
         write_artifacts=False,
     )
-    assert any(
-        "retention" in f.lower() or "encryption" in f.lower() for f in out["findings"]
-    )
+    assert any("retention" in f.lower() or "encryption" in f.lower() for f in out["findings"])

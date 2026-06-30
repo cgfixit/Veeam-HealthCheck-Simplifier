@@ -19,7 +19,6 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import vhc_simplifier as vhc  # noqa: E402
 
-
 # =====================================================================
 # Typical Windows Server VHC export paths
 # =====================================================================
@@ -83,18 +82,10 @@ class TestWindowsPaths:
         export_dir = tmp_path / "VHC"
         export_dir.mkdir()
         (export_dir / "VBR01_Jobs.csv").write_text(vhc.EMBEDDED_JOBS, encoding="utf-8")
-        (export_dir / "VeeamSessionReport.csv").write_text(
-            vhc.EMBEDDED_SESSIONS, encoding="utf-8"
-        )
-        (export_dir / "VBR01_SecurityCompliance.csv").write_text(
-            vhc.EMBEDDED_SECURITY, encoding="utf-8"
-        )
-        (export_dir / "VBR01_Repositories.csv").write_text(
-            vhc.EMBEDDED_REPOS, encoding="utf-8"
-        )
-        (export_dir / "VBR01malware_events.csv").write_text(
-            vhc.EMBEDDED_MALWARE, encoding="utf-8"
-        )
+        (export_dir / "VeeamSessionReport.csv").write_text(vhc.EMBEDDED_SESSIONS, encoding="utf-8")
+        (export_dir / "VBR01_SecurityCompliance.csv").write_text(vhc.EMBEDDED_SECURITY, encoding="utf-8")
+        (export_dir / "VBR01_Repositories.csv").write_text(vhc.EMBEDDED_REPOS, encoding="utf-8")
+        (export_dir / "VBR01malware_events.csv").write_text(vhc.EMBEDDED_MALWARE, encoding="utf-8")
         out = vhc.run_healthcheck(
             input_dir=str(export_dir),
             output_dir=str(tmp_path / "out"),
@@ -172,8 +163,7 @@ class TestWindowsEncoding:
 
     def test_cp1252_csv_decodes_windows_locale_job_name(self, tmp_path):
         csv_data = (
-            "Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"
-            '"Sicherung B\u00fcro",3,7,False\n'
+            'Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"Sicherung B\u00fcro",3,7,False\n'
         )
         p = tmp_path / "localhost_Jobs.csv"
         p.write_bytes(csv_data.encode("cp1252"))
@@ -259,18 +249,12 @@ class TestWindowsServerVersions:
         )
         sec_findings = out["sections"].get("Security & Compliance", [])
         if scenario["mfa_status"] != "Passed":
-            assert any("MFA" in f for f in sec_findings), (
-                f"MFA gap missed on {scenario['os']}"
-            )
+            assert any("MFA" in f for f in sec_findings), f"MFA gap missed on {scenario['os']}"
         else:
-            assert not any("MFA" in f for f in sec_findings), (
-                f"False MFA finding on {scenario['os']}"
-            )
+            assert not any("MFA" in f for f in sec_findings), f"False MFA finding on {scenario['os']}"
 
         if scenario["rdp_status"] != "Passed":
-            assert any("Remote desktop" in f for f in sec_findings), (
-                f"RDP gap missed on {scenario['os']}"
-            )
+            assert any("Remote desktop" in f for f in sec_findings), f"RDP gap missed on {scenario['os']}"
         else:
             assert not any("Remote desktop" in f for f in sec_findings), (
                 f"False RDP finding on {scenario['os']}"
@@ -300,16 +284,12 @@ class TestPowerShellRemediation:
                 assert "-WhatIf" in line
 
     def test_special_chars_in_job_name_quoted(self):
-        enriched = vhc.enrich_findings(
-            ["Job 'Test$Job (Prod)' missing storage encryption."]
-        )
+        enriched = vhc.enrich_findings(["Job 'Test$Job (Prod)' missing storage encryption."])
         cmd = enriched[0]["cmd"]
         assert "'Test$Job (Prod)'" in cmd or "REFUSED" in cmd
 
     def test_semicolons_in_job_name_safe(self):
-        enriched = vhc.enrich_findings(
-            ["Job 'Test;Drop-Database' missing storage encryption."]
-        )
+        enriched = vhc.enrich_findings(["Job 'Test;Drop-Database' missing storage encryption."])
         cmd = enriched[0]["cmd"]
         assert ";" not in cmd.split("'")[0]
 
@@ -319,9 +299,7 @@ class TestPowerShellRemediation:
         assert "Test|evil" in cmd  # inside quotes, so safe
 
     def test_control_char_injection_refused(self):
-        enriched = vhc.enrich_findings(
-            ["Job 'evil\x00cmd' missing storage encryption."]
-        )
+        enriched = vhc.enrich_findings(["Job 'evil\x00cmd' missing storage encryption."])
         assert "REFUSED" in enriched[0]["cmd"]
 
     def test_newline_injection_refused(self):
@@ -360,12 +338,8 @@ class TestIntegrationErrorHandling:
         assert any("Invalid Slack webhook" in e for e in out["errors"])
 
     def test_valid_slack_webhook_format_accepted(self):
-        assert vhc._validate_slack_webhook(
-            "https://hooks.slack.com/services/T00/B00/xxx"
-        )
-        assert vhc._validate_slack_webhook(
-            "https://hooks.slack-gov.com/services/T00/B00/xxx"
-        )
+        assert vhc._validate_slack_webhook("https://hooks.slack.com/services/T00/B00/xxx")
+        assert vhc._validate_slack_webhook("https://hooks.slack-gov.com/services/T00/B00/xxx")
         assert not vhc._validate_slack_webhook("https://hooks.slack.com/T00/B00/xxx")
         assert not vhc._validate_slack_webhook(  # DevSkim: ignore DS137138 — testing that HTTP is rejected
             "http://hooks.slack.com/services/T00/B00/xxx"
@@ -460,9 +434,7 @@ class TestLargeDataset:
 
 class TestMainEntrypoint:
     def test_main_returns_0_on_demo(self, monkeypatch):
-        monkeypatch.setattr(
-            sys, "argv", ["vhc_simplifier.py", "--demo", "--quiet", "--no-artifacts"]
-        )
+        monkeypatch.setattr(sys, "argv", ["vhc_simplifier.py", "--demo", "--quiet", "--no-artifacts"])
         assert vhc.main() == 0
 
     def test_main_returns_2_on_errors(self, monkeypatch, tmp_path):
@@ -480,10 +452,6 @@ class TestMainEntrypoint:
         assert vhc.main() == 2
 
     def test_main_catches_unhandled_exception(self, monkeypatch):
-        monkeypatch.setattr(
-            sys, "argv", ["vhc_simplifier.py", "--demo", "--quiet", "--no-artifacts"]
-        )
-        with mock.patch(
-            "vhc_simplifier.run_healthcheck", side_effect=RuntimeError("boom")
-        ):
+        monkeypatch.setattr(sys, "argv", ["vhc_simplifier.py", "--demo", "--quiet", "--no-artifacts"])
+        with mock.patch("vhc_simplifier.run_healthcheck", side_effect=RuntimeError("boom")):
             assert vhc.main() == 1
