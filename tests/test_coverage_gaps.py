@@ -621,6 +621,77 @@ def test_health_check_config_is_frozen():
 
 
 # =====================================================================
+# pd.isna() exception paths in type-coercion helpers
+# =====================================================================
+
+
+class _BadArrayValue:
+    """Value whose __array__ raises, triggering the except guard in pd.isna()."""
+
+    def __array__(self, *a, **kw):
+        raise ValueError("bad array")
+
+
+class TestToNumberIsnaExceptionPath:
+    def test_value_that_makes_pd_isna_raise(self):
+        result = vhc._to_number(_BadArrayValue())
+        assert result == 0.0
+
+    def test_value_that_makes_pd_isna_raise_with_custom_default(self):
+        result = vhc._to_number(_BadArrayValue(), default=42.0)
+        assert result == 42.0
+
+
+class TestToBoolIsnaExceptionPath:
+    def test_value_that_makes_pd_isna_raise(self):
+        result = vhc._to_bool(_BadArrayValue())
+        assert result is False
+
+    def test_non_standard_type_returns_default(self):
+        result = vhc._to_bool(object())
+        assert result is False
+
+    def test_non_standard_type_returns_custom_default(self):
+        result = vhc._to_bool(object(), default=True)
+        assert result is True
+
+
+class TestStrCellIsnaExceptionPath:
+    def test_value_that_makes_pd_isna_raise(self):
+        result = vhc._str_cell(_BadArrayValue())
+        assert isinstance(result, str)
+        assert result != "<unknown>"
+
+
+# =====================================================================
+# analyze_jobs — exception in sessions processing
+# =====================================================================
+
+
+class TestAnalyzeJobsSessionsException:
+    def test_sessions_processing_exception_caught(self):
+        bad_sessions = mock.MagicMock()
+        bad_sessions.columns = ["Status", "JobName"]
+        bad_sessions.__getitem__ = mock.Mock(side_effect=RuntimeError("boom"))
+        findings = vhc.analyze_jobs(None, bad_sessions)
+        assert findings == []
+
+
+# =====================================================================
+# analyze_security — pd.isna(status) exception path
+# =====================================================================
+
+
+class TestAnalyzeSecurityIsnaException:
+    def test_status_that_makes_isna_raise(self):
+        sec = pd.DataFrame(
+            [{"Best Practice": "MFA enabled", "Status": _BadArrayValue()}]
+        )
+        findings = vhc.analyze_security(sec)
+        assert len(findings) == 1
+
+
+# =====================================================================
 # Column guard edge cases (new in optimize pass)
 # =====================================================================
 
