@@ -170,6 +170,29 @@ class TestWindowsEncoding:
         assert not result.errors
         assert df.iloc[0]["Name"] == "TestRepo"
 
+    def test_cp1252_csv_decodes_windows_locale_job_name(self, tmp_path):
+        csv_data = (
+            "Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled\n"
+            '"Sicherung B\u00fcro",3,7,False\n'
+        )
+        p = tmp_path / "localhost_Jobs.csv"
+        p.write_bytes(csv_data.encode("cp1252"))
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_csv(p, result)
+        assert df is not None
+        assert not result.errors
+        assert df.iloc[0]["Name"] == "Sicherung B\u00fcro"
+
+    def test_utf8_bom_json_parses_without_errors(self, tmp_path):
+        data = [{"Name": "TestRepo", "IsImmutabilitySupported": False}]
+        p = tmp_path / "localhost_Repositories.json"
+        p.write_text("\ufeff" + json.dumps(data), encoding="utf-8")
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_json(p, result)
+        assert df is not None
+        assert not result.errors
+        assert df.iloc[0]["Name"] == "TestRepo"
+
 
 # =====================================================================
 # Windows Server version–specific scenarios (2016, 2019, 2022, 2025)
