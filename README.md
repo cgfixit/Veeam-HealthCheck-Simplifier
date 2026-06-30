@@ -199,6 +199,29 @@ Uses `httpx` if available, falls back to stdlib `urllib`.
 
 ---
 
+## Docker Compose
+
+A `docker-compose.yml` is provided to build and run the CLI in a container without installing Python or dependencies locally.
+
+```bash
+mkdir -p vhc-exports output
+# copy your VHC export files into ./vhc-exports
+docker compose up --build
+```
+
+This mounts `./vhc-exports` read-only to `/app/input` and `./output` read-write to `/app/output`, and runs `vhc_simplifier.py --input-dir /app/input --output-dir /app/output --quiet`. Override the default command for other flags, e.g. Salesforce or Slack integration:
+
+```bash
+docker compose run --rm vhc-simplifier \
+  --input-dir /app/input --output-dir /app/output \
+  --sf-account-id 001XXXXXXXXXXXX \
+  --slack-webhook https://hooks.slack.com/services/T00/B00/xxx
+```
+
+Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
+
+---
+
 ## Testing
 
 The test suite covers 219 tests across 6 files with 90%+ code coverage:

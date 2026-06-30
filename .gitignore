@@ -34,6 +34,11 @@ healthcheck*.json
 output/
 vhc_output/
 
+# docker-compose.yml default bind-mount targets — may contain real customer
+# VHC export data or generated artifacts; never commit either.
+/output/
+/vhc-exports/
+
 # ------------------------------------------------------------
 # Secrets / environment
 # (vhc_simplifier enforces env-var creds — keep them out)

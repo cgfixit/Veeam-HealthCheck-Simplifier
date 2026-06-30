@@ -1,0 +1,45 @@
+# Veeam Health Check Simplifier — Docker Compose
+#
+# Volume mounts:
+#   ./vhc-exports -> /app/input   (read-only)  VHC CSV/JSON exports produced by
+#                                               https://vee.am/vhc2 on the VBR server.
+#   ./output      -> /app/output  (read-write) generated remediation artifacts
+#                                               (remediation_summary.md, fixit.ps1, tickets.json).
+#
+# Real VHC export data and generated artifacts must never be committed to this
+# repo — both directories are covered by .gitignore.
+
+services:
+  vhc-simplifier:
+    build: .
+    image: vhc-simplifier:local
+    container_name: vhc-simplifier
+    restart: unless-stopped
+    environment:
+      SF_USERNAME: ${SF_USERNAME:-}
+      SF_PASSWORD: ${SF_PASSWORD:-}
+      SF_TOKEN: ${SF_TOKEN:-}
+      # Optional passthrough, forward-compatible with cron-mode support that
+      # may land in the base image. Unused (and harmless) if the image
+      # doesn't read it.
+      CRON_SCHEDULE: ${CRON_SCHEDULE:-}
+      # Required under read_only: true below — without it, Python may try to
+      # write .pyc cache files for imported packages (e.g. pandas) at runtime
+      # and fail because the root filesystem is read-only.
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./vhc-exports:/app/input:ro
+      - ./output:/app/output
+    command: ["--input-dir", "/app/input", "--output-dir", "/app/output", "--quiet"]
+    # Security hardening: lock down the container while keeping functionality.
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - "ALL"
+    tmpfs:
+      # Writable scratch space carved out of the read-only root filesystem.
+      # /home/vhc/crontabs is where optional cron-mode support (if present in
+      # the image) would need to write; harmless if that feature isn't there.
+      - /home/vhc/crontabs
+      - /tmp
