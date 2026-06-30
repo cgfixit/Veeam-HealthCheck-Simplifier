@@ -499,10 +499,11 @@ def _validate_slack_webhook(url: str) -> bool:
 def _post_slack_summary(enriched, webhook, result):
     high = sum(1 for e in enriched if e.get("severity") == "High")
     med = sum(1 for e in enriched if e.get("severity") == "Medium")
-    payload = json.dumps({"text": f"VHC complete - {high} High, {med} Medium findings."}).encode()
+    message = f"VHC complete - {high} High, {med} Medium findings."
+    payload = json.dumps({"text": message}).encode()
     try:
         if HAS_HTTPX:
-            httpx.post(webhook, json={"text": f"VHC: {high}H {med}M"}, timeout=10)
+            httpx.post(webhook, json={"text": message}, timeout=10)
         else:
             req = urllib.request.Request(
                 webhook, data=payload, headers={"Content-Type": "application/json"}
