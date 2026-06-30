@@ -700,12 +700,13 @@ class TestSafeLoadJsonEncoding:
 
 class TestOutputDirFailure:
     def test_unwritable_output_dir(self, tmp_path):
-        out = vhc.run_healthcheck(
-            output_dir="/proc/nonexistent/impossible/path",
-            demo=True,
-            verbose=False,
-            write_artifacts=True,
-        )
+        with mock.patch("pathlib.Path.mkdir", side_effect=OSError("Permission denied")):
+            out = vhc.run_healthcheck(
+                output_dir=str(tmp_path / "blocked"),
+                demo=True,
+                verbose=False,
+                write_artifacts=True,
+            )
         assert any("Cannot create output dir" in e for e in out["errors"])
 
     def test_embedded_load_failure_captured(self):
