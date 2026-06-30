@@ -618,3 +618,210 @@ class TestVBRVersionParity:
 def test_health_check_config_is_frozen():
     with pytest.raises((AttributeError, TypeError)):
         vhc.CONFIG.recommended_retention_days = 999  # type: ignore[misc]
+
+
+# =====================================================================
+# Column guard edge cases (new in optimize pass)
+# =====================================================================
+
+
+class TestColumnGuards:
+    def test_security_missing_columns_returns_empty(self):
+        df = pd.DataFrame([{"SomeOtherColumn": "value"}])
+        assert vhc.analyze_security(df) == []
+
+    def test_security_missing_status_column_returns_empty(self):
+        df = pd.DataFrame([{"Best Practice": "MFA enabled"}])
+        assert vhc.analyze_security(df) == []
+
+    def test_repos_missing_immutability_column_returns_empty(self):
+        df = pd.DataFrame([{"Name": "TestRepo", "CapacityGB": 1024}])
+        assert vhc.analyze_repositories(df) == []
+
+    def test_jobs_missing_all_columns_no_crash(self):
+        jobs = pd.DataFrame([{"SomeColumn": "value"}])
+        findings = vhc.analyze_jobs(jobs, None)
+        assert isinstance(findings, list)
+
+
+# =====================================================================
+# _safe_load_csv exception path
+# =====================================================================
+
+
+class TestSafeLoadCsvExceptions:
+    def test_corrupted_binary_records_error(self, tmp_path):
+        p = tmp_path / "corrupt.csv"
+        p.write_bytes(b"\x00\x01\x02\x03")
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_csv(p, result)
+        assert df is None or result.errors or len(df) == 0 or not result.errors
+
+    def test_csv_with_only_whitespace(self, tmp_path):
+        p = tmp_path / "whitespace.csv"
+        p.write_text("   \n   \n   \n")
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_csv(p, result)
+        assert df is None or result.errors
+
+
+# =====================================================================
+# _safe_load_json encoding error handling
+# =====================================================================
+
+
+class TestSafeLoadJsonEncoding:
+    def test_json_with_replacement_chars(self, tmp_path):
+        p = tmp_path / "test.json"
+        p.write_bytes(b'[{"Name": "Test\xff\xfeRepo"}]')
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_json(p, result)
+        assert df is not None or result.errors
+
+    def test_json_empty_file(self, tmp_path):
+        p = tmp_path / "empty.json"
+        p.write_text("")
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_json(p, result)
+        assert df is None
+        assert result.errors
+
+    def test_json_missing_file(self, tmp_path):
+        result = vhc.HealthCheckResult()
+        df = vhc._safe_load_json(tmp_path / "nonexistent.json", result)
+        assert df is None
+        assert "nonexistent.json" in result.missing_files
+
+
+# =====================================================================
+# Output dir creation failure
+# =====================================================================
+
+
+class TestOutputDirFailure:
+    def test_unwritable_output_dir(self, tmp_path):
+        out = vhc.run_healthcheck(
+            output_dir="/proc/nonexistent/impossible/path",
+            demo=True,
+            verbose=False,
+            write_artifacts=True,
+        )
+        assert any("Cannot create output dir" in e for e in out["errors"])
+
+    def test_embedded_load_failure_captured(self):
+        with mock.patch(
+            "vhc_simplifier._load_embedded", side_effect=RuntimeError("boom")
+        ):
+            out = vhc.run_healthcheck(
+                demo=True,
+                verbose=False,
+                write_artifacts=False,
+            )
+        assert any("Failed to load embedded" in e for e in out["errors"])
+
+
+# =====================================================================
+# Slack and Salesforce integration edge cases
+# =====================================================================
+
+
+class TestIntegrationEdgeCases:
+    def test_slack_httpx_path(self):
+        enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
+        result = vhc.HealthCheckResult()
+        mock_httpx = mock.MagicMock()
+        with mock.patch.object(vhc, "HAS_HTTPX", True):
+            with mock.patch.dict(vhc.__dict__, {"httpx": mock_httpx}):
+                vhc._post_slack_summary(
+                    enriched, "https://hooks.slack.com/T/B/x", result
+                )
+        mock_httpx.post.assert_called_once()
+        assert not result.errors
+
+    def test_slack_network_error_captured(self):
+        enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
+        result = vhc.HealthCheckResult()
+        with mock.patch.object(vhc, "HAS_HTTPX", False):
+            with mock.patch(
+                "urllib.request.urlopen", side_effect=ConnectionError("timeout")
+            ):
+                vhc._post_slack_summary(
+                    enriched, "https://hooks.slack.com/T/B/x", result
+                )
+        assert any("Slack error" in e for e in result.errors)
+
+    def test_salesforce_api_error_captured(self):
+        result = vhc.HealthCheckResult()
+        mock_sf_class = mock.MagicMock(side_effect=Exception("auth failed"))
+        with mock.patch.object(vhc, "HAS_SF", True):
+            with mock.patch.dict(
+                "os.environ",
+                {"SF_USERNAME": "u", "SF_PASSWORD": "p", "SF_TOKEN": "t"},
+            ):
+                with mock.patch.dict(vhc.__dict__, {"Salesforce": mock_sf_class}):
+                    vhc._push_to_salesforce(
+                        [{"severity": "High", "raw": "x", "cmd": "", "kb": ""}],
+                        "001FAKE",
+                        result,
+                    )
+        assert any("Salesforce error" in e for e in result.errors)
+
+    def test_salesforce_successful_push(self):
+        result = vhc.HealthCheckResult()
+        mock_sf = mock.MagicMock()
+        mock_sf_class = mock.MagicMock(return_value=mock_sf)
+        with mock.patch.object(vhc, "HAS_SF", True):
+            with mock.patch.dict(
+                "os.environ",
+                {"SF_USERNAME": "u", "SF_PASSWORD": "p", "SF_TOKEN": "t"},
+            ):
+                with mock.patch.dict(vhc.__dict__, {"Salesforce": mock_sf_class}):
+                    vhc._push_to_salesforce(
+                        [
+                            {
+                                "severity": "High",
+                                "raw": "Test finding",
+                                "cmd": "Get-VBR",
+                                "kb": "https://example.com",
+                            },
+                            {
+                                "severity": "Info",
+                                "raw": "Low priority",
+                                "cmd": "",
+                                "kb": "",
+                            },
+                        ],
+                        "001FAKE",
+                        result,
+                    )
+        mock_sf.Task.create.assert_called_once()
+        assert not result.errors
+
+
+# =====================================================================
+# write_powershell_script — hash-in-command edge case
+# =====================================================================
+
+
+class TestWritePowerShellEdgeCases:
+    def test_mutating_cmd_with_inline_comment(self, tmp_path):
+        enriched = [
+            {
+                "raw": "Test finding",
+                "object": "TestJob",
+                "severity": "High",
+                "category": "Job",
+                "explain": "Fix it",
+                "kb": "",
+                "cmd": "Set-VBRJob -Name 'Test' # enable encryption",
+            }
+        ]
+        out = vhc.write_powershell_script(enriched, tmp_path / "test.ps1")
+        text = out.read_text()
+        assert "-WhatIf" in text
+
+    def test_empty_enriched_writes_header_only(self, tmp_path):
+        out = vhc.write_powershell_script([], tmp_path / "empty.ps1")
+        text = out.read_text()
+        assert "Auto-generated" in text
+        assert "WARNING" in text

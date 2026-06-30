@@ -1,11 +1,15 @@
-# Claude Code Skills
+# Claude Code Skills & Commands
 
-Skills in this folder provide repo-specific optimizations for Claude Code sessions.
+## Registered Commands (`.claude/commands/`)
 
-## Available Skills
+These are invokable as slash commands in Claude Code sessions:
 
-### `/ponytail`
-Minimal-change optimization skill. Biases toward the laziest correct path: reuse existing helpers, keep changes in few files, avoid speculative scaffolding. Use when making small fixes or incremental changes.
+- **`/ponytail`** — Minimal-change optimization. Biases toward the laziest correct path: reuse existing helpers, keep changes in few files, avoid speculative scaffolding.
+- **`/optimize`** — Performance and robustness optimization. Guides encoding hardening, fault isolation, test coverage improvements, and CI pipeline efficiency.
 
-### `/optimize`
-Performance and robustness optimization skill. Guides improvements to encoding handling, fault isolation, test coverage, and CI pipeline efficiency for this VHC project.
+## Reference Skills (`.claude/Skills/`)
+
+Detailed skill documentation for project contributors:
+
+- `ponytail.md` — Full ponytail skill reference
+- `optimize.md` — Full optimize skill reference with checklists

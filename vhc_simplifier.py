@@ -168,7 +168,7 @@ def _safe_load_json(
         result.missing_files.append(path.name)
         return None
     try:
-        raw = path.read_text(encoding="utf-8")
+        raw = path.read_text(encoding="utf-8", errors="replace")
         raw = raw.lstrip("﻿")
         data = json.loads(raw)
         if isinstance(data, list):
@@ -290,6 +290,8 @@ def analyze_security(sec_df):
     findings: list[str] = []
     if sec_df is None:
         return findings
+    if "Best Practice" not in sec_df.columns or "Status" not in sec_df.columns:
+        return findings
     for _, row in sec_df.iterrows():
         bp = row.get("Best Practice", "")
         status = row.get("Status", "")
@@ -310,6 +312,8 @@ def analyze_security(sec_df):
 def analyze_repositories(repo_df):
     findings: list[str] = []
     if repo_df is None:
+        return findings
+    if "IsImmutabilitySupported" not in repo_df.columns:
         return findings
     for _, row in repo_df.iterrows():
         name = _row_name(row)
