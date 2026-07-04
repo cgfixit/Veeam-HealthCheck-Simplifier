@@ -376,6 +376,13 @@ class TestEnrichFindingsEdgeCases:
         ]
         assert len(vhc.enrich_findings(findings)) == 2
 
+    def test_dedup_keeps_different_findings_for_same_job(self):
+        findings = [
+            "Job 'A' has low retention count.",
+            "Job 'A' keeps restore points < recommended.",
+        ]
+        assert len(vhc.enrich_findings(findings)) == 2
+
 
 # =====================================================================
 # _find_unquoted_hash edge cases
@@ -449,7 +456,7 @@ class TestWriteMarkdown:
         enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
         out = vhc.write_markdown(enriched, {}, tmp_path / "summary.md")
         text = out.read_text()
-        assert "https://helpcenter.veeam.com/docs/backup/vbr/encryption.html" in text
+        assert "https://helpcenter.veeam.com/archive/backup/120/vsphere/encryption_job.html" in text
 
     def test_empty_enriched_list(self, tmp_path):
         out = vhc.write_markdown([], {}, tmp_path / "summary.md")

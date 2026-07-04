@@ -434,49 +434,52 @@ PATTERN_MAP = {
         "category": "Job",
         "explain": "Enable at-rest encryption to protect backup data.",
         "cmd": "Set-VBRJobAdvancedStorageOptions -Job (Get-VBRJob -Name {0}) -EnableEncryption $true",
-        "kb": "https://helpcenter.veeam.com/docs/backup/vbr/encryption.html",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/encryption_job.html",
     },
     r"Job '(.+?)' has low retention count": {
         "severity": "Medium",
         "category": "Job",
         "explain": "Increase restore-point retention.",
         "cmd": "# Set via VBR Console: Job Properties > Storage > Restore points to keep on disk",
-        "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/retention_policy.html",
     },
     r"Job '(.+?)' keeps restore points < recommended": {
         "severity": "Medium",
         "category": "Job",
         "explain": "Extend RetainDaysToKeep.",
         "cmd": "# Set via VBR Console: Job Properties > Storage > Retention Policy (GFS days)",
-        "kb": "https://helpcenter.veeam.com/docs/backup/vbr/retention_policy.html",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/retention_policy.html",
     },
     r"Repository '(.+?)' does not support immutability": {
         "severity": "High",
         "category": "Repository",
         "explain": "Migrate to Hardened Linux Repository for ransomware resilience.",
-        "cmd": "# Manual: Configure Hardened Linux Repository (see VBR v11+ docs)",
-        "kb": "https://helpcenter.veeam.com/docs/backup/vbr/hardened_repository.html",
+        "cmd": "# Manual: Configure Hardened Linux Repository",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/hardened_repository_about.html",
     },
     r"Recent job session failure: '(.+?)'": {
         "severity": "High",
         "category": "Job",
         "explain": "Investigate last sessions for root cause.",
         "cmd": "Get-VBRBackupSession -Name {0} | Sort-Object EndTime -Descending | Select-Object -First 5",
-        "kb": "https://www.veeam.com/kb",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/powershell/get-vbrbackupsession.html",
     },
     r"Security Best Practice NOT implemented: (.+?) \(": {
         "severity": "High",
         "category": "Security",
         "explain": "Apply missing security control per Veeam Hardening Guide.",
         "cmd": "# See Veeam Hardening Guide for implementation steps",
-        "kb": "https://bp.veeam.com/security/Design-and-implementation/Hardening/",
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/best_practices_analyzer.html",
     },
     r"Malware event: (.+?) - ": {
         "severity": "High",
         "category": "Malware",
         "explain": "Triage immediately - isolate affected systems.",
-        "cmd": "Get-VBRMalwareEvent | Sort-Object DetectionTime -Descending | Select-Object -First 10",
-        "kb": "https://helpcenter.veeam.com/docs/backup/vsphere/malware_detection.html",
+        "cmd": (
+            "Get-VBRMalwareDetectionEvent | Sort-Object DetectionTime -Descending | "
+            "Select-Object -First 10"
+        ),
+        "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/malware_detection_view_events.html",
     },
 }
 
@@ -493,7 +496,7 @@ def enrich_findings(raw: list[str]) -> list[dict[str, Any]]:
             if not m:
                 continue
             obj = m.group(1) if m.groups() else ""
-            dedup_key = f"{meta['severity']}|{meta['category']}|{obj}"
+            dedup_key = f"{pattern}|{obj}"
             if dedup_key in seen:
                 matched = True
                 break
