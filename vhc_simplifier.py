@@ -476,8 +476,7 @@ PATTERN_MAP = {
         "category": "Malware",
         "explain": "Triage immediately - isolate affected systems.",
         "cmd": (
-            "Get-VBRMalwareDetectionEvent | Sort-Object DetectionTime -Descending | "
-            "Select-Object -First 10"
+            "Get-VBRMalwareDetectionEvent | Sort-Object DetectionTime -Descending | Select-Object -First 10"
         ),
         "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/malware_detection_view_events.html",
     },
