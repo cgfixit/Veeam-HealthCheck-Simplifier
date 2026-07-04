@@ -1,6 +1,6 @@
 # Veeam Health Check Simplifier
 
-**A security-focused CLI pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for compliance gaps, and generates safe, reviewable remediation artifacts.**
+**A security-focused VBR pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for compliance gaps, and generates safe, reviewable remediation artifacts.**
 
 ---
 
