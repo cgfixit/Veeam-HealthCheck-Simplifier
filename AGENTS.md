@@ -4,9 +4,10 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 
 ## Scope
 
-- This repo is a single-file Python CLI centered on [vhc_simplifier.py](/C:/Users/cgrady/Documents/Codex/2026-06-30/connect-to-veeam-healthcheck-simplifier-github/vhc_simplifier.py).
-- Tests live in [tests/test_vhc_simplifier.py](/C:/Users/cgrady/Documents/Codex/2026-06-30/connect-to-veeam-healthcheck-simplifier-github/tests/test_vhc_simplifier.py).
+- This repo is a single-file Python CLI centered on `vhc_simplifier.py`.
+- Tests live under `tests/`.
 - There is no package layout, build backend, or lockfile. Keep changes minimal and local.
+- Use `.codex/skills/refactor/SKILL.md` when asked to run an iterative architecture or speed refactor loop.
 
 ## Commands
 
@@ -21,6 +22,7 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Main outputs are `remediation_summary.md`, `fixit.ps1`, and `tickets.json`.
 - Optional integrations are Salesforce and Slack. Never hardcode or log secrets.
 - PowerShell output is intentionally safety-biased with `-WhatIf` defaults. Do not remove that without an explicit request.
+- The current repo-local Codex structure follows the CyClaw split: `AGENTS.md` for repo facts, `.codex/` for reusable Codex workflows.
 
 ## Change Rules
 
@@ -29,6 +31,7 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Keep analyzer logic pure where practical; isolate IO and external integrations.
 - Treat credential handling, webhook posting, and generated PowerShell as high-risk paths.
 - For mutating behavior, preserve dry-run or safe-preview semantics.
+- When editing README or positioning copy, separate repo-backed facts, measured runtime results, market signals, and inference. Do not claim PMF or operational savings without evidence.
 
 ## Validation Expectations
 
