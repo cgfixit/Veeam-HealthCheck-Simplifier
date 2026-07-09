@@ -819,7 +819,7 @@ def run_healthcheck(
         if _validate_slack_webhook(slack_webhook):
             _post_slack_summary(result.enriched, slack_webhook, result)
         else:
-            result.errors.append(f"Invalid Slack webhook URL: {slack_webhook!r}")
+            result.errors.append("Invalid Slack webhook URL")
     if verbose:
         _print_console_report(result)
     return result.to_dict()
