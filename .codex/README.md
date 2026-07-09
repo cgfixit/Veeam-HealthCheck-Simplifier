@@ -26,3 +26,12 @@ Codex optimization bias:
 - `rtk-exe` is optional and should only be used for an explicit `rtk.exe` task after confirming the binary exists locally.
 
 Keep this folder small. Add new Codex files only when they encode real repo behavior.
+
+The repo-local `/` command notes mirror the skills one-for-one:
+
+- `optimize`
+- `refactor`
+- `codex-verify`
+- `vhc-export-validation`
+- `vhc-remediation-safety`
+- `ponytail`
