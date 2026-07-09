@@ -328,14 +328,16 @@ class TestIntegrationErrorHandling:
         assert any("Salesforce credentials missing" in e for e in out["errors"])
 
     def test_invalid_slack_webhook_rejected(self, tmp_path):
+        webhook = "http://evil.example.com/services/T00/B00/secret-token"
         out = vhc.run_healthcheck(
             output_dir=str(tmp_path),
             demo=True,
             verbose=False,
             write_artifacts=False,
-            slack_webhook="http://evil.example.com/steal-data",
+            slack_webhook=webhook,
         )
         assert any("Invalid Slack webhook" in e for e in out["errors"])
+        assert all(webhook not in e for e in out["errors"])
 
     def test_valid_slack_webhook_format_accepted(self):
         assert vhc._validate_slack_webhook("https://hooks.slack.com/services/T00/B00/xxx")
