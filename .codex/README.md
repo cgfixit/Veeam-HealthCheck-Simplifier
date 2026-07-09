@@ -3,8 +3,10 @@
 This repository includes local Codex guidance.
 
 - `AGENTS.md` holds repo-specific commands, constraints, and validation rules.
+- `.codex/commands/` holds lightweight repo-local command wrappers for the main Codex entrypoints.
 - `.codex/skills/ponytail/SKILL.md` adds a repo-local minimal-change skill.
 - `.codex/skills/optimize/SKILL.md` ports the useful Claude optimize/command guidance into current Codex terms.
+- `.codex/skills/codex-verify/SKILL.md` checks repo-local Codex discoverability plus GitHub and workflow setup drift.
 - `.codex/skills/refactor/SKILL.md` adds the iterative architecture and speed refactor loop.
 - `.codex/skills/vhc-export-validation/SKILL.md` covers VHC CSV/JSON filename, encoding, and v12/v13 fixture validation work.
 - `.codex/skills/vhc-remediation-safety/SKILL.md` covers generated PowerShell, tickets, Slack, Salesforce, and secret-safe behavior.
@@ -20,5 +22,7 @@ Codex optimization bias:
 - Try to find different issues than a generic Claude-style optimizer would repeat: cold import/startup cost, redundant artifact generation steps, duplicate encoding/validation logic, and optional-integration behavior that escaped focused tests.
 - Treat `.codex/skills/optimize/SKILL.md` as the registered Codex copy of `.claude/Skills/optimize.md` and `.claude/commands/optimize.md`; it intentionally corrects stale replacement-decoding guidance.
 - Treat `.codex/skills/ponytail/SKILL.md` as the registered Codex copy of `.claude/Skills/ponytail.md` and `.claude/commands/ponytail.md`.
+- The recommended global overlays here are `ponytail` for minimal diffs and `karpathy-guidelines` for assumption-checking and surgical edits.
+- `rtk-exe` is optional and should only be used for an explicit `rtk.exe` task after confirming the binary exists locally.
 
 Keep this folder small. Add new Codex files only when they encode real repo behavior.
