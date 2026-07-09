@@ -14,6 +14,7 @@ python vhc_simplifier.py --demo --sf-account-id 001...   # credential error expe
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import io
 import json
 import logging
@@ -31,19 +32,10 @@ import pandas as pd
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("vhc_simplifier")
 
-try:
-    from simple_salesforce import Salesforce
-
-    HAS_SF = True
-except ImportError:
-    HAS_SF = False
-
-try:
-    import httpx
-
-    HAS_HTTPX = True
-except ImportError:
-    HAS_HTTPX = False
+HAS_SF = importlib.util.find_spec("simple_salesforce") is not None
+HAS_HTTPX = importlib.util.find_spec("httpx") is not None
+Salesforce: Any | None = None
+httpx: Any | None = None
 
 
 # ------------------------------------
@@ -614,7 +606,7 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
         result.errors.append("pip install simple-salesforce")
         return
     try:
-        sf = Salesforce(username=username, password=password, security_token=token)
+        sf = _get_salesforce_class()(username=username, password=password, security_token=token)
         for e in enriched:
             if e["severity"] not in ("High", "Medium"):
                 continue
@@ -648,6 +640,24 @@ def _redact(text: str, *secrets: str | None) -> str:
     return text
 
 
+def _get_salesforce_class() -> Any:
+    global Salesforce
+    if Salesforce is None:
+        from simple_salesforce import Salesforce as salesforce_cls
+
+        Salesforce = salesforce_cls
+    return Salesforce
+
+
+def _get_httpx() -> Any:
+    global httpx
+    if httpx is None:
+        import httpx as httpx_module
+
+        httpx = httpx_module
+    return httpx
+
+
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     """Refuse to follow redirects so an allowlisted host can't bounce us elsewhere."""
 
@@ -662,7 +672,7 @@ def _post_slack_summary(enriched, webhook, result):
     payload = json.dumps({"text": message}).encode()
     try:
         if HAS_HTTPX:
-            response = httpx.post(webhook, json={"text": message}, timeout=10, follow_redirects=False)
+            response = _get_httpx().post(webhook, json={"text": message}, timeout=10, follow_redirects=False)
             response.raise_for_status()
         else:
             req = urllib.request.Request(webhook, data=payload, headers={"Content-Type": "application/json"})
