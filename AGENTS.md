@@ -8,6 +8,9 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Tests live under `tests/`.
 - There is no package layout, build backend, or lockfile. Keep changes minimal and local.
 - Use `.codex/skills/refactor/SKILL.md` when asked to run an iterative architecture or speed refactor loop.
+- Use `.codex/skills/optimize/SKILL.md` for robustness, loader, CI, and Python 3.12+ Windows compatibility optimization.
+- Use `.codex/skills/vhc-export-validation/SKILL.md` when changing VHC CSV/JSON input discovery, encodings, or VBR v12/v13 fixture behavior.
+- Use `.codex/skills/vhc-remediation-safety/SKILL.md` when changing generated PowerShell, ticket payloads, Slack, Salesforce, or secret/error handling.
 
 ## Commands
 
@@ -23,6 +26,7 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Optional integrations are Salesforce and Slack. Never hardcode or log secrets.
 - PowerShell output is intentionally safety-biased with `-WhatIf` defaults. Do not remove that without an explicit request.
 - The current repo-local Codex structure follows the CyClaw split: `AGENTS.md` for repo facts, `.codex/` for reusable Codex workflows.
+- `.claude/Skills` and `.claude/commands` have Codex equivalents under `.codex/skills`; keep Codex copies authoritative if the Claude notes are stale.
 
 ## Change Rules
 
