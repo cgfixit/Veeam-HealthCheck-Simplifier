@@ -150,7 +150,8 @@ def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _candidate_encodings(path: pathlib.Path) -> tuple[str, ...]:
-    sample = path.read_bytes()[:4096]
+    with path.open("rb") as f:
+        sample = f.read(4096)
     if b"\x00" in sample:
         return ("utf-16", "utf-16-le", "utf-16-be", "utf-8-sig", "cp1252")
     return _TEXT_ENCODINGS
