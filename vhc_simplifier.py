@@ -417,13 +417,11 @@ def analyze_malware(malware_df):
         return findings
     if "Status" not in malware_df.columns:
         return findings
-    mask = (
-        malware_df["Status"]
-        .astype(str)
-        .str.lower()
-        .str.contains(r"infected|suspicious", na=False, regex=True)
+    status_text = malware_df["Status"].astype(str).str.lower()
+    mask = status_text.str.contains("infected", regex=False, na=False) | status_text.str.contains(
+        "suspicious", regex=False, na=False
     )
-    flagged = malware_df[mask]
+    flagged = malware_df.loc[mask]
     object_names = flagged["ObjectName"] if "ObjectName" in flagged.columns else repeat(None, len(flagged))
     detection_times = (
         flagged["DetectionTime"] if "DetectionTime" in flagged.columns else repeat(None, len(flagged))
