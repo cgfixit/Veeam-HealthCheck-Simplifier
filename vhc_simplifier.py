@@ -25,6 +25,7 @@ import sys
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from itertools import repeat
 from typing import Any
 
 import pandas as pd
@@ -344,14 +345,24 @@ def _row_name(row: Any, default: str = "<unknown>") -> str:
 def analyze_jobs(jobs_df, sessions_df):
     findings: list[str] = []
     if jobs_df is not None:
-        for _, row in jobs_df.iterrows():
-            name = _row_name(row)
-            if _to_number(row.get("RetentionCount")) < CONFIG.recommended_min_retention_count:
-                findings.append(f"Job '{name}' has low retention count.")
-            if _to_number(row.get("RetainDaysToKeep")) < CONFIG.recommended_retention_days:
-                findings.append(f"Job '{name}' keeps restore points < recommended.")
-            if not _to_bool(row.get("StgEncryptionEnabled")):
-                findings.append(f"Job '{name}' missing storage encryption.")
+        row_count = len(jobs_df)
+        names = jobs_df["Name"] if "Name" in jobs_df.columns else repeat(None, row_count)
+        has_retention_count = "RetentionCount" in jobs_df.columns
+        has_retain_days = "RetainDaysToKeep" in jobs_df.columns
+        has_encryption = "StgEncryptionEnabled" in jobs_df.columns
+        retention_counts = jobs_df["RetentionCount"] if has_retention_count else repeat(None, row_count)
+        retain_days = jobs_df["RetainDaysToKeep"] if has_retain_days else repeat(None, row_count)
+        encrypted = jobs_df["StgEncryptionEnabled"] if has_encryption else repeat(None, row_count)
+        for name, retention_count, retain_days_to_keep, stg_encryption_enabled in zip(
+            names, retention_counts, retain_days, encrypted, strict=False
+        ):
+            job_name = _str_cell(name)
+            if has_retention_count and _to_number(retention_count) < CONFIG.recommended_min_retention_count:
+                findings.append(f"Job '{job_name}' has low retention count.")
+            if has_retain_days and _to_number(retain_days_to_keep) < CONFIG.recommended_retention_days:
+                findings.append(f"Job '{job_name}' keeps restore points < recommended.")
+            if has_encryption and not _to_bool(stg_encryption_enabled):
+                findings.append(f"Job '{job_name}' missing storage encryption.")
     if sessions_df is not None:
         try:
             if "Status" not in sessions_df.columns or "JobName" not in sessions_df.columns:
@@ -370,9 +381,7 @@ def analyze_security(sec_df):
         return findings
     if "Best Practice" not in sec_df.columns or "Status" not in sec_df.columns:
         return findings
-    for _, row in sec_df.iterrows():
-        bp = row.get("Best Practice", "")
-        status = row.get("Status", "")
+    for bp, status in zip(sec_df["Best Practice"], sec_df["Status"], strict=False):
         if pd.isna(bp) or str(bp).strip() == "":
             continue
         try:
@@ -394,10 +403,11 @@ def analyze_repositories(repo_df):
         return findings
     if "IsImmutabilitySupported" not in repo_df.columns:
         return findings
-    for _, row in repo_df.iterrows():
-        name = _row_name(row)
-        if not _to_bool(row.get("IsImmutabilitySupported")):
-            findings.append(f"Repository '{name}' does not support immutability.")
+    names = repo_df["Name"] if "Name" in repo_df.columns else repeat(None, len(repo_df))
+    for name, is_immutable_supported in zip(names, repo_df["IsImmutabilitySupported"], strict=False):
+        repo_name = _str_cell(name)
+        if not _to_bool(is_immutable_supported):
+            findings.append(f"Repository '{repo_name}' does not support immutability.")
     return findings
 
 
@@ -413,10 +423,16 @@ def analyze_malware(malware_df):
         .str.lower()
         .str.contains(r"infected|suspicious", na=False, regex=True)
     )
-    for _, row in malware_df[mask].iterrows():
+    flagged = malware_df[mask]
+    object_names = flagged["ObjectName"] if "ObjectName" in flagged.columns else repeat(None, len(flagged))
+    detection_times = (
+        flagged["DetectionTime"] if "DetectionTime" in flagged.columns else repeat(None, len(flagged))
+    )
+    for object_name, status, detection_time in zip(
+        object_names, flagged["Status"], detection_times, strict=False
+    ):
         findings.append(
-            f"Malware event: {_str_cell(row.get('ObjectName'))} - "
-            f"{_str_cell(row.get('Status'))} at {_str_cell(row.get('DetectionTime'))}"
+            f"Malware event: {_str_cell(object_name)} - {_str_cell(status)} at {_str_cell(detection_time)}"
         )
     return findings
 
