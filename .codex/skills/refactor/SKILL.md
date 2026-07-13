@@ -1,128 +1,95 @@
 ---
 name: refactor
-description: >-
-  Iterative architecture and speed refactor loop for
-  Veeam-HealthCheck-Simplifier. Use when asked to refactor structure, clean up
-  the single-file CLI, or run a measured optimization loop with verification,
-  review, commits, and tracker updates.
+description: Iterative, evidence-backed refactor workflow for Veeam-HealthCheck-Simplifier. Use for single-file architecture cleanup, test consolidation, logging ownership, duplication removal, or measured local performance work.
 ---
 
 # Refactor
 
-Use this skill for `Veeam-HealthCheck-Simplifier` when the user asks for a
-refactor or performance work.
+Use Ponytail discipline: read the real path first, delete duplication before
+adding layers, and keep one independently reviewable change per loop. The
+single-file CLI remains the default architecture.
 
-This is a Codex-native loop with Ponytail always on: keep the single-file CLI
-unless there is a concrete structural reason to split it, reuse existing
-helpers, and delete duplication before adding new layers.
+## Architecture contract
 
-## Rules
+Preserve this ownership flow unless a failing test or measurement proves a
+different boundary is needed:
 
-- Keep progress in the OS temporary directory as `refactor-<repo>.md`.
-- Use deterministic local paths such as `--demo` or targeted tests, not live
-  Salesforce or Slack calls.
-- One targeted change per loop.
-- After each significant step: measure, test, autoreview, commit, update the
-  tracker.
+1. Runtime/config: imports, optional dependency probes, `HealthCheckConfig`, and
+   `HealthCheckResult`.
+2. Input adapter: `_resolve_input_file()` -> encoding/text helpers ->
+   `_safe_load_csv()` / `_safe_load_json()`.
+3. Domain analysis: coercion helpers and four analyzers, dispatched through
+   `_run_analyzer()` so one failed section cannot abort the run.
+4. Policy/enrichment: `PATTERN_MAP`, `_MUTATING_VERBS`, `_ps_quote()`, and
+   `enrich_findings()`.
+5. Output adapters: three writers dispatched independently through
+   `_write_artifact()`.
+6. External adapters: opt-in Salesforce and Slack paths, including validation,
+   timeout, redirect refusal, and redaction.
+7. Orchestration/presentation: `run_healthcheck()` returns the existing dict
+   contract; `main()` owns CLI parsing, process logging, and exit codes 0/1/2.
 
-## Setup
+Do not create service/repository/controller classes around seams that already
+exist. Split the module only when a cohesive boundary has multiple owners or
+cannot be tested safely in place, and record why a helper extraction is
+insufficient.
 
-Create the tracker only when the loop starts, using this template:
+## Test ownership
 
-```md
-# Refactor Loop - <repo>
-Started: <UTC timestamp>
-Target: cleaner CLI structure and deterministic local paths under 50 ms where feasible
-## Goals
-- Clean, understandable single-file architecture
-- No duplicated encoding, enrichment, or artifact logic
-- Deterministic local hot paths measured after each change
-- Ponytail defaults: delete, simplify, reuse
-## Baseline
-(record first measurements before editing)
-## Progress
-```
+- `tests/conftest.py`: canonical reusable simulated VBR 12/13 CSV/JSON fixtures.
+- `test_vhc_simplifier.py`: core helpers, analyzers, loaders, enrichment,
+  writers, resilience wrappers, demo flow, and Slack redirect behavior.
+- `test_coverage_gaps.py`: rare branches, malformed shapes, serialization,
+  writer failures, and integration adapters.
+- `test_vbr_server_simulation.py`: shared-fixture version parity, partial and
+  corrupt inputs, analyzer/artifact isolation, and end-to-end sections.
+- `test_windows_server_env.py`: Windows paths/encodings, PowerShell safety,
+  larger inputs, CLI logging, and exit codes.
+- `test_mock_veeam_environment.py`: overlapping self-contained simulations;
+  consolidate only as a separate deletion-focused change with no lost behavior
+  or coverage.
 
-## Measurement Protocol
+Extend the owning file and reuse `conftest.py`; do not add a third VBR fixture
+matrix. Replace tautological assertions with an expected result or error.
+Always label these inputs as simulations, not proof of live product support.
 
-This repo is a CLI, not a web app. Measure deterministic local commands and
-helpers instead of pretending HTTP pages exist.
+## Logging refactor contract
 
-Keep measurement conditions fixed:
+The justified logging seam is the CLI boundary:
 
-- same Python version
-- same `--demo` or fixture inputs
-- no live network integrations
-- five runs per measurement
-- median, not mean
-
-Suggested baseline set:
-
-```bash
-python -m py_compile vhc_simplifier.py
-python vhc_simplifier.py --demo --quiet --no-artifacts
-python -m pytest tests/test_vhc_simplifier.py -q
-python -c "import time; t=time.perf_counter(); import vhc_simplifier; print(int((time.perf_counter()-t)*1000))"
-```
-
-If the step targets a different path, switch to the matching targeted test or
-helper probe and record why.
-
-Pass/fail gate:
-
-- The targeted owned paths should improve and trend toward sub-50 ms medians
-  where feasible.
-- If interpreter startup or unavoidable file I/O is the remaining floor,
-  document that ceiling in the tracker.
+- module scope should create only a named logger, not configure the process root
+  logger as an import side effect;
+- `main()` should configure CLI handlers and levels once;
+- define whether `--quiet` suppresses only the human report or also routine log
+  records before changing behavior;
+- keep the human report on stdout and diagnostics on stderr without duplicates;
+- treat `HealthCheckResult.errors` as the programmatic error contract;
+- redact credential and webhook values from both result errors and log records;
+- cover changes with focused `caplog` and `capsys` tests, not a logging framework.
 
 ## Loop
 
-1. Assess
-   - Look for god-function sprawl, mixed IO/business logic, repeated encoding
-     or enrichment work, duplicate artifact handling, or optional-integration
-     code leaking into the ordinary path.
-2. Pick one change
-   - Prefer deleting dead branches, extracting one bounded helper, reducing
-     repeated file/JSON/markdown work, or tightening the ordinary `--demo` path.
-3. Execute
-   - Keep the diff focused.
-4. Measure
-   - Re-run the same measurement set.
-5. Live-test correctness
-   - `python -m py_compile vhc_simplifier.py`
-   - `python -m pytest tests/ -v` when behavior changed
-   - targeted test files when the scope is narrower
-6. Autoreview
-   - Review the diff in REVIEW MODE.
-   - Prioritize findings broad optimizer passes often miss here:
-     - cold import/startup cost
-     - repeated artifact generation steps
-     - duplicated encoding and validation logic
-     - optional integration code slowing the default path
-     - code that should be deleted instead of abstracted
-7. Commit
-   - `git add -p`
-   - `git commit -m "refactor: <what changed and why>"`
-   - Use `perf:` when the step is mainly a measured speed gain.
-8. Update tracker
-   - Record target, change, measurements, tests, autoreview outcome, commit hash
+1. Create `$env:TEMP\refactor-Veeam-HealthCheck-Simplifier.md` only when a
+   multi-step loop starts. Record UTC time, target, baseline, and progress.
+2. Establish a clean baseline with syntax, full tests/coverage, Ruff, and the
+   deterministic demo command from the optimize skill.
+3. Pick one demonstrated ownership, duplication, test, logging, or performance
+   defect. Search all callers and tests.
+4. Apply the smallest change. Preserve public dict keys, artifacts, partial-run
+   behavior, safety controls, and exit codes unless the task explicitly changes
+   their contract.
+5. Run the owning tests, then the full baseline when behavior or shared code
+   changed. Review the entire diff in REVIEW mode.
+6. If performance is the target, compare at least five fixed-fixture runs before
+   and after and report the median. Do not impose an arbitrary startup target on
+   pandas import or filesystem IO.
+7. Commit only when the user requested repository mutation or the active
+   workflow explicitly includes commits. Update the tracker with checks,
+   measurements, review outcome, and commit hash.
 
-## Stop Criteria
+## Stop criteria
 
-Stop when all are true:
-
-- The path you touched has one obvious owner.
-- IO, enrichment, and artifact generation are not unnecessarily tangled.
-- Targeted checks pass.
-- Latest autoreview finds no correctness issues worth fixing first.
-- Deterministic owned hot paths are under 50 ms for two consecutive five-run
-  measurement rounds, or a documented runtime floor is the only remaining limit.
-
-Append:
-
-```md
-## Final State
-Completed: <timestamp>
-Summary: <what improved>
-Ceilings: <anything still above target and why>
-```
+Stop when the touched path has one obvious owner, duplication is reduced rather
+than relocated, targeted and full required checks pass, no correctness issue
+remains in the diff, and any performance claim has reproducible before/after
+evidence. A no-op is correct when the evidence does not justify a refactor.

@@ -7,7 +7,9 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - This repo is a single-file Python CLI centered on `vhc_simplifier.py`.
 - Tests live under `tests/`.
 - Packaging uses the `setuptools.build_meta` backend for the single `vhc_simplifier` module; there is no package directory or lockfile.
-- `.codex/commands/` is the repo-local command discovery surface for Codex.
+- `.codex/skills/` contains the authoritative repo workflows.
+- `.codex/commands/` contains lightweight compatibility wrappers. Do not turn
+  interactive workflows into lifecycle hooks.
 - Use `.codex/skills/refactor/SKILL.md` when asked to run an iterative architecture or speed refactor loop.
 - Use `.codex/skills/optimize/SKILL.md` for robustness, loader, CI, and Python 3.12+ Windows compatibility optimization.
 - Use `.codex/skills/codex-verify/SKILL.md` after clone, before publish, or when checking GitHub/CI/Codex setup drift.
@@ -25,17 +27,23 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 ## Repo Facts
 
 - Target Python is 3.12+ per README and file header.
+- The parser has five logical input basenames and four analyzer sections;
+  sessions are analyzed inside `analyze_jobs()`.
+- VBR 12/13 and Windows Server fixtures are simulations. Do not claim live
+  product support without authentic exports or authoritative Veeam evidence.
 - Main outputs are `remediation_summary.md`, `fixit.ps1`, and `tickets.json`.
 - Optional integrations are Salesforce and Slack. Never hardcode or log secrets.
 - PowerShell output is intentionally safety-biased with `-WhatIf` defaults. Do not remove that without an explicit request.
-- The current repo-local Codex structure follows the CyClaw split: `AGENTS.md` for repo facts, `.codex/` for reusable Codex workflows.
-- `.claude/Skills` and `.claude/commands` have Codex equivalents under `.codex/skills`; keep Codex copies authoritative if the Claude notes are stale.
+- `AGENTS.md` owns repo facts; `.codex/skills/` owns reusable workflows. Keep
+  Codex guidance authoritative if Claude notes are stale.
 
 ## Change Rules
 
 - Preserve the single-file CLI structure unless a refactor is explicitly requested.
 - Prefer stdlib and existing dependencies over adding packages.
 - Keep analyzer logic pure where practical; isolate IO and external integrations.
+- Keep `run_healthcheck()` as the orchestrator and `main()` as the CLI/logging
+  boundary; importing the module must not configure process-global logging.
 - Treat credential handling, webhook posting, and generated PowerShell as high-risk paths.
 - For mutating behavior, preserve dry-run or safe-preview semantics.
 - When editing README or positioning copy, separate repo-backed facts, measured runtime results, market signals, and inference. Do not claim PMF or operational savings without evidence.
@@ -44,4 +52,6 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 
 - After editing Python, run `python -m py_compile vhc_simplifier.py`.
 - Run `python -m pytest tests/ -v` when the change affects behavior.
+- Run `python -m ruff check .` and `python -m ruff format --check .` after
+  Python changes.
 - If optional integrations are touched, state what could not be verified without live credentials.
