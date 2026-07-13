@@ -38,5 +38,3 @@ Get-Content .codex\README.md
 - Report connector-verified repo permissions separately from local CLI auth.
 - Call out floating GitHub Action refs explicitly instead of pretending the repo
   is fully pinned.
-- If `rtk.exe` is not on PATH, stop there for RTK-specific work; do not invent a
-  repo routine around a missing binary.

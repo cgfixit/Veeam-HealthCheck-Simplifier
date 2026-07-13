@@ -22,8 +22,6 @@ Codex optimization bias:
 - Try to find different issues than a generic Claude-style optimizer would repeat: cold import/startup cost, redundant artifact generation steps, duplicate encoding/validation logic, and optional-integration behavior that escaped focused tests.
 - Treat `.codex/skills/optimize/SKILL.md` as the registered Codex copy of `.claude/Skills/optimize.md` and `.claude/commands/optimize.md`; it intentionally corrects stale replacement-decoding guidance.
 - Treat `.codex/skills/ponytail/SKILL.md` as the registered Codex copy of `.claude/Skills/ponytail.md` and `.claude/commands/ponytail.md`.
-- The recommended global overlays here are `ponytail` for minimal diffs and `karpathy-guidelines` for assumption-checking and surgical edits.
-- `rtk-exe` is optional and should only be used for an explicit `rtk.exe` task after confirming the binary exists locally.
 
 Keep this folder small. Add new Codex files only when they encode real repo behavior.
 
