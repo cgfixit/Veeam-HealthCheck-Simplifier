@@ -18,7 +18,7 @@ helpers, and delete duplication before adding new layers.
 
 ## Rules
 
-- Keep progress in `/tmp/refactor-${PROJNAME}.md`.
+- Keep progress in the OS temporary directory as `refactor-<repo>.md`.
 - Use deterministic local paths such as `--demo` or targeted tests, not live
   Salesforce or Slack calls.
 - One targeted change per loop.
@@ -27,15 +27,11 @@ helpers, and delete duplication before adding new layers.
 
 ## Setup
 
-```bash
-PROJNAME=$(basename "$PWD")
-TRACKER="/tmp/refactor-${PROJNAME}.md"
-```
+Create the tracker only when the loop starts, using this template:
 
-```bash
-[ -f "$TRACKER" ] || cat > "$TRACKER" <<EOF
-# Refactor Loop - $PROJNAME
-Started: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+```md
+# Refactor Loop - <repo>
+Started: <UTC timestamp>
 Target: cleaner CLI structure and deterministic local paths under 50 ms where feasible
 ## Goals
 - Clean, understandable single-file architecture
@@ -45,7 +41,6 @@ Target: cleaner CLI structure and deterministic local paths under 50 ms where fe
 ## Baseline
 (record first measurements before editing)
 ## Progress
-EOF
 ```
 
 ## Measurement Protocol
@@ -120,8 +115,8 @@ Stop when all are true:
 - IO, enrichment, and artifact generation are not unnecessarily tangled.
 - Targeted checks pass.
 - Latest autoreview finds no correctness issues worth fixing first.
-- Deterministic owned hot paths are under 50 ms for two consecutive runs, or a
-  documented runtime floor is the only remaining limit.
+- Deterministic owned hot paths are under 50 ms for two consecutive five-run
+  measurement rounds, or a documented runtime floor is the only remaining limit.
 
 Append:
 
