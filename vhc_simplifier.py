@@ -230,7 +230,6 @@ def _safe_load_json(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFra
         return None
     try:
         raw = _read_text(path)
-        raw = raw.lstrip("﻿")
         data = json.loads(raw)
         records = _json_records(data)
         if records is None:
