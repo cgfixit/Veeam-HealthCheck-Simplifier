@@ -1,12 +1,12 @@
 # Codex Commands
 
-Repo-local command wrappers:
+Six thin interactive wrappers route to the authoritative skills:
 
-- `optimize.md` for small robustness and CI-aligned optimization passes
-- `ponytail.md` for minimum-diff changes
-- `refactor.md` for iterative architecture and speed cleanup
-- `codex-verify.md` for setup, GitHub, and workflow verification
-- `vhc-export-validation.md` for VHC export parsing and fixture coverage changes
-- `vhc-remediation-safety.md` for PowerShell, ticket, Slack, and secret-safe work
+- `optimize` — one evidence-backed VHC/VBR improvement
+- `refactor` — architecture, tests, duplication, logging, or measured speed
+- `codex-verify` — repo freshness, Codex discovery, GitHub, and Actions
+- `vhc-export-validation` — five-input discovery and decoding
+- `vhc-remediation-safety` — version-checked artifacts and integrations
+- `ponytail` — smallest safe root-cause change
 
-These notes point to the repo-local skill source of truth under `.codex/skills/`.
+Do not move these workflows into hooks. Keep procedures in `.codex/skills/`.
