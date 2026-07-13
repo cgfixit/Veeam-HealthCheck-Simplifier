@@ -35,7 +35,8 @@ interactive workflow entrypoints, not lifecycle hooks:
 - `vhc-remediation-safety`
 - `ponytail`
 
-Do not consolidate these workflows into hooks. Hooks are for deterministic
-lifecycle enforcement; running review, optimize, refactor, or publish checks as
-implicit events would be hidden and unsafe. Keep wrappers thin and skills
-authoritative.
+Do not consolidate these interactive, networked, or mutating workflows into
+hooks. A future hook is justified only for a narrow, deterministic,
+non-mutating lifecycle check with a proven trigger and bounded runtime. Keep
+review, optimize, refactor, and publish work user-invoked; keep wrappers thin
+and skills authoritative.

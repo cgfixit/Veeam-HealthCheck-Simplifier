@@ -9,7 +9,8 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Packaging uses the `setuptools.build_meta` backend for the single `vhc_simplifier` module; there is no package directory or lockfile.
 - `.codex/skills/` contains the authoritative repo workflows.
 - `.codex/commands/` contains lightweight compatibility wrappers. Do not turn
-  interactive workflows into lifecycle hooks.
+  interactive, networked, or mutating workflows into lifecycle hooks; reserve
+  hooks for narrow, deterministic, non-mutating checks with a proven trigger.
 - Use `.codex/skills/refactor/SKILL.md` when asked to run an iterative architecture or speed refactor loop.
 - Use `.codex/skills/optimize/SKILL.md` for robustness, loader, CI, and Python 3.12+ Windows compatibility optimization.
 - Use `.codex/skills/codex-verify/SKILL.md` after clone, before publish, or when checking GitHub/CI/Codex setup drift.
