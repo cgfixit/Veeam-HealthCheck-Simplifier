@@ -3,7 +3,9 @@
 This repository includes local Codex guidance.
 
 - `AGENTS.md` holds repo-specific commands, constraints, and validation rules.
-- `.codex/commands/` holds lightweight compatibility wrappers; skills remain the source of truth.
+- `.agents/skills/` holds namespaced Codex-discoverable entrypoints.
+- `.codex/commands/` holds lightweight compatibility wrappers; the detailed
+  `.codex/skills/` workflows remain the source of truth.
 - `.codex/skills/ponytail/SKILL.md` adds a repo-local minimal-change skill.
 - `.codex/skills/optimize/SKILL.md` owns evidence-based VHC/VBR robustness and performance work.
 - `.codex/skills/codex-verify/SKILL.md` checks repo-local Codex discoverability plus GitHub and workflow setup drift.
@@ -23,7 +25,9 @@ Codex optimization bias:
 - Treat the Codex skills as authoritative for Codex. Do not import stale Claude
   guidance such as replacement decoding.
 
-Keep this folder small. Add new Codex files only when they encode real repo behavior.
+Keep this folder and the `.agents/skills/` entrypoints small. Add new Codex files
+only when they encode real repo behavior. Do not copy detailed procedures into
+the entrypoints or command wrappers.
 
 The compatibility command notes mirror the skills one-for-one. They are
 interactive workflow entrypoints, not lifecycle hooks:

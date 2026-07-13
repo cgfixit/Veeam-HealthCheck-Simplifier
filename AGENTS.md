@@ -8,6 +8,8 @@ Repository guidance for Codex in `cgfixit/Veeam-HealthCheck-Simplifier`.
 - Tests live under `tests/`.
 - Packaging uses the `setuptools.build_meta` backend for the single `vhc_simplifier` module; there is no package directory or lockfile.
 - `.codex/skills/` contains the authoritative repo workflows.
+- `.agents/skills/` contains namespaced Codex discovery entrypoints that route
+  to the authoritative `.codex/skills/` files; do not duplicate procedures.
 - `.codex/commands/` contains lightweight compatibility wrappers. Do not turn
   interactive, networked, or mutating workflows into lifecycle hooks; reserve
   hooks for narrow, deterministic, non-mutating checks with a proven trigger.

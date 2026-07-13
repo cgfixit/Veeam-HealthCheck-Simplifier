@@ -25,10 +25,12 @@ GitHub.
 
 ## 2. Codex wiring
 
-Verify all six source skills and six thin compatibility wrappers exist:
+Verify all six source skills, six namespaced discovery entrypoints, and six thin
+compatibility command wrappers exist:
 
 ```powershell
 Get-ChildItem .codex\skills -Directory
+Get-ChildItem .agents\skills -Directory
 Get-ChildItem .codex\commands -File -Filter *.md |
     Where-Object Name -ne README.md
 rg -n "^name:|^description:" .codex\skills
@@ -38,22 +40,26 @@ Get-Content .codex\README.md
 
 Requirements:
 
-- each skill folder contains one valid `SKILL.md` with a unique lowercase name;
+- each source skill and discovery entrypoint contains one valid `SKILL.md`;
+- every discovery entrypoint has a unique lowercase name matching its folder
+  and routes to the matching authoritative `.codex/skills/` workflow;
 - wrappers point to the matching skill and do not duplicate its procedure;
 - `AGENTS.md` contains repo facts, while personal tone and generic safety stay
   in account settings;
 - commands remain interactive wrappers; do not replace them wholesale with
   lifecycle hooks. A narrow hook is acceptable only for a deterministic,
   non-mutating check with a proven lifecycle trigger;
-- repo-local and user-scope skills do not silently shadow different same-name
-  skills. Resolve `$CODEX_HOME` (or `$HOME\.codex`) and inspect its `skills` and
-  `commands` directories before installing. Never overwrite an unrelated skill.
+- repo-local and user-scope skills do not duplicate a different same-name skill.
+  Inspect `.agents/skills` from the working directory through the repo root,
+  `$HOME\.agents\skills`, `$CODEX_HOME\skills` (or `$HOME\.codex\skills`), and
+  `$HOME\.codex\commands` before installing. Never overwrite an unrelated skill.
 
 Do not treat a renamed destination directory as a collision-free alias: Codex
 discovers the `name` in `SKILL.md`, and the skill folder should match that name.
-If an account-scope name collides, keep the repo-local skill authoritative or
-package the repository skills in a namespaced plugin. Never overwrite an
-unrelated skill.
+If an account-scope name collides, rename both the folder and frontmatter name,
+package the repository skills in a namespaced plugin, or disable one exact path
+with a `[[skills.config]]` entry. Same-name skills can both appear; neither
+silently becomes authoritative.
 
 After installing or changing user-scope skills, restart Codex and verify the
 expected entries in the skill/slash picker. Filesystem presence alone is not a
