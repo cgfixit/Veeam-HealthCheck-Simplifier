@@ -271,11 +271,13 @@ def test_enrich_findings_refuses_injection_in_object_name():
 # ------------------------------------
 
 
-def test_write_powershell_adds_whatif_to_mutating(tmp_path):
+def test_storage_encryption_remediation_is_review_only(tmp_path):
     enriched = vhc.enrich_findings(["Job 'Alpha' missing storage encryption."])
     out = vhc.write_powershell_script(enriched, tmp_path / "fixit.ps1")
     text = out.read_text()
-    assert "-WhatIf" in text
+    assert "Manual review" in text
+    assert "Alpha" in text
+    assert "Set-VBRJobAdvancedStorageOptions" not in text
 
 
 def test_write_ticket_payload_only_high_medium(tmp_path):

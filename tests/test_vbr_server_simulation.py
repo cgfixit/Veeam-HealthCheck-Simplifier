@@ -183,7 +183,7 @@ class TestVBRv12SimulationCSV:
         assert "High" in severities
         assert "Medium" in severities
 
-    def test_powershell_contains_veeam_cmdlets(self, vbr_v12_csv_dir, tmp_path):
+    def test_powershell_omits_unsafe_storage_encryption_cmdlet(self, vbr_v12_csv_dir, tmp_path):
         vhc.run_healthcheck(
             input_dir=str(vbr_v12_csv_dir),
             output_dir=str(tmp_path),
@@ -192,7 +192,8 @@ class TestVBRv12SimulationCSV:
             write_artifacts=True,
         )
         ps_text = (tmp_path / "fixit.ps1").read_text()
-        assert "Set-VBRJobAdvancedStorageOptions" in ps_text or "Get-VBRBackupSession" in ps_text
+        assert "Set-VBRJobAdvancedStorageOptions" not in ps_text
+        assert "Get-VBRBackupSession" in ps_text
         assert "Get-VBRMalwareDetectionEvent" in ps_text
         assert "Get-VBRMalwareEvent" not in ps_text
 

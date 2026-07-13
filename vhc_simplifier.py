@@ -439,8 +439,11 @@ PATTERN_MAP = {
     r"Job '(.+?)' missing storage encryption": {
         "severity": "High",
         "category": "Job",
-        "explain": "Enable at-rest encryption to protect backup data.",
-        "cmd": "Set-VBRJobAdvancedStorageOptions -Job (Get-VBRJob -Name {0}) -EnableEncryption $true",
+        "explain": (
+            "Enable at-rest encryption after verifying the workload type and "
+            "selecting an existing encryption key."
+        ),
+        "cmd": "# Manual review: verify workload type and encryption key for {0} in the VBR Console",
         "kb": "https://helpcenter.veeam.com/archive/backup/120/vsphere/encryption_job.html",
     },
     r"Job '(.+?)' has low retention count": {
