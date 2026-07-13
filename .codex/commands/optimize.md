@@ -4,8 +4,10 @@ Use `.codex/skills/optimize/SKILL.md` as the source of truth.
 
 When asked to optimize this repo:
 
-- keep the single-file CLI unless structure is explicitly requested
-- reuse existing helpers in `vhc_simplifier.py`
-- validate with `python -m py_compile vhc_simplifier.py`
-- run `python -m pytest tests/ -v` when behavior changes
-- use Ruff checks for CI parity when the diff touches Python behavior broadly
+- record the baseline and reject unrelated worktree changes before editing
+- trace discovery, loading, analysis, enrichment, artifacts, and integrations
+- search every caller before changing a shared helper
+- fix one demonstrated root cause with the smallest diff and one focused test;
+  integration error tests must prove secrets are absent
+- format touched Python files, then rerun the full baseline, demo, and diff review
+- report a no-op when no evidence-backed optimization remains

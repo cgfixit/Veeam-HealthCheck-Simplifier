@@ -555,14 +555,16 @@ def test_slack_urllib_fallback(tmp_path):
 def test_slack_httpx_failure_records_error():
     enriched = vhc.enrich_findings(["Job 'X' missing storage encryption."])
     result = vhc.HealthCheckResult()
+    webhook = "https://hooks.slack.com/services/T/B/secret-token"
     response = mock.Mock()
-    response.raise_for_status.side_effect = RuntimeError("bad webhook")
+    response.raise_for_status.side_effect = RuntimeError(f"bad webhook {webhook}")
     mock_httpx = mock.MagicMock()
     mock_httpx.post.return_value = response
     with mock.patch.object(vhc, "HAS_HTTPX", True):
         with mock.patch.dict(vhc.__dict__, {"httpx": mock_httpx}):
-            vhc._post_slack_summary(enriched, "https://hooks.slack.com/services/T/B/x", result)
+            vhc._post_slack_summary(enriched, webhook, result)
     assert any("Slack error" in e for e in result.errors)
+    assert all(webhook not in e for e in result.errors)
 
 
 # =====================================================================

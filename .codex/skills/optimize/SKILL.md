@@ -5,7 +5,32 @@ description: Repo-local optimization and robustness checklist for Veeam-HealthCh
 
 # Optimize
 
-Use this for small robustness and performance passes on `vhc_simplifier.py`.
+Use this for one evidence-backed robustness or performance pass on
+`vhc_simplifier.py`.
+
+## Workflow
+
+1. Record the baseline and confirm the worktree contains no unrelated changes:
+   - `git status --short --branch`
+   - `python -m py_compile vhc_simplifier.py`
+   - `python -m pytest tests/ -v --cov=vhc_simplifier --cov-fail-under=80`
+   - `ruff check vhc_simplifier.py tests/`
+   - `ruff format --check vhc_simplifier.py tests/`
+2. Trace the affected path end to end: input discovery, loading, analysis,
+   enrichment, artifact writing, and optional integrations. Search every caller
+   before editing a shared helper.
+3. Pick one demonstrated issue. Prefer incorrect edge-case behavior, repeated
+   IO, an unisolated failure, or CI/runtime drift over speculative cleanup.
+4. Make the smallest root-cause change. Add one focused regression test when
+   behavior changes; make no code change when the evidence does not justify one.
+   For integration failures, assert credential-shaped inputs are absent from
+   errors and logs instead of checking only that an error exists.
+5. Run `ruff format` on touched Python files, re-run the baseline checks and
+   `python vhc_simplifier.py --demo --quiet --no-artifacts`, then review
+   `git diff --check` and the complete diff.
+
+For performance claims, compare the same deterministic local command before and
+after. Do not benchmark live Slack or Salesforce calls.
 
 ## Rules
 
@@ -15,12 +40,8 @@ Use this for small robustness and performance passes on `vhc_simplifier.py`.
 - Guard missing DataFrame columns before access.
 - Keep optional Slack and Salesforce paths isolated from the default local path.
 - Preserve `-WhatIf` on generated PowerShell mutating commands.
-
-## Checks
-
-- Python syntax: `python -m py_compile vhc_simplifier.py`
-- Behavior: `python -m pytest tests/ -v`
-- CI parity: `ruff check vhc_simplifier.py tests/` and `ruff format --check vhc_simplifier.py tests/`
+- Use `vhc-export-validation` for loader/export changes and
+  `vhc-remediation-safety` for generated artifacts or integrations.
 
 ## Notes
 

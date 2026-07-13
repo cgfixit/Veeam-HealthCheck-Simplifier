@@ -697,7 +697,7 @@ def _post_slack_summary(enriched, webhook, result):
                     raise RuntimeError(f"Slack returned HTTP {status}")
         logger.info("Slack posted")
     except Exception as exc:
-        result.errors.append(f"Slack error: {exc}")
+        result.errors.append(f"Slack error: {_redact(str(exc), webhook)}")
 
 
 def _print_console_report(result: HealthCheckResult) -> None:
