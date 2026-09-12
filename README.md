@@ -1,6 +1,6 @@
 # Veeam Health Check Simplifier
 
-**A security-focused VBR pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for optimizations, fixes, security hardening, compliance gaps, and generates safe, reviewable remediation artifacts.**
+**v4.1.0** — a security-focused VBR pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for optimizations, fixes, security hardening, compliance gaps, and generates safe, reviewable remediation artifacts.
 
 ---
 
@@ -39,7 +39,7 @@ This project takes those raw exports and transforms them into actionable remedia
                      │  vhc_simplifier.py               │
                      │                                   │
                      │  1. Load exports (CSV or JSON)    │
-                     │  2. Analyze across 5 domains      │
+                     │  2. Analyze 4 sections (5 inputs) │
                      │  3. Enrich with remediation cmds  │
                      │  4. Generate artifacts            │
                      │  5. (Optional) Push to SF/Slack   │
@@ -54,9 +54,8 @@ This project takes those raw exports and transforms them into actionable remedia
 ### Analysis Pipeline
 
 1. **Load** — `_safe_load_csv()` / `_safe_load_json()` with UTF-8 BOM stripping, Windows-oriented encoding fallback, corrupt-decode guards, and empty-file guards
-2. **Analyze** — fault-isolated analyzers (`_run_analyzer()` wrapper catches exceptions per-analyzer, never aborts the run):
-   - `analyze_jobs()` — retention, encryption, schedule gaps
-   - `analyze_sessions()` — recent failures and warnings
+2. **Analyze** — four fault-isolated analyzers (`_run_analyzer()` wrapper catches exceptions per-analyzer, never aborts the run):
+   - `analyze_jobs(jobs_df, sessions_df)` — retention, encryption, and recent session failures (there is no separate `analyze_sessions()`)
    - `analyze_security()` — best-practice compliance status
    - `analyze_repositories()` — immutability support gaps
    - `analyze_malware()` — infected/suspicious scan results
@@ -73,7 +72,7 @@ This project takes those raw exports and transforms them into actionable remedia
 
 - **Multi-format input** — CSV (default, from [vee.am/vhc2](https://vee.am/vhc2)) or JSON (VBR REST API exports)
 - **Demo mode** — runs instantly with embedded real-world sample data; no input files required
-- **Secure PowerShell output** — all mutating commands (`Set-`, `New-`, `Remove-`, etc.) include `-WhatIf` by default
+- **Secure PowerShell output** — mutating cmdlets (`Set-`, `New-`, `Remove-`, etc.) include `-WhatIf` by default; several remediations (storage encryption, retention, immutability) are review-only comments, not mutating cmdlets
 - **PS injection prevention** — object names with control characters are refused, not interpolated
 - **Salesforce integration** — creates Tasks on an Account record for High/Medium findings
 - **Slack notifications** — posts a severity summary to an incoming webhook
@@ -95,14 +94,22 @@ This project takes those raw exports and transforms them into actionable remedia
 
 ## Requirements
 
-- Python 3.12+ (tested on 3.12 and 3.13)
+- Python 3.12+ (tested on 3.12 and 3.13); package version **4.1.0** (`pyproject.toml`)
 - `pandas` (core dependency)
 - `simple-salesforce` *(optional — only for `--sf-account-id`)*
 - `httpx` *(optional — Slack fallback uses stdlib `urllib` if absent)*
-- `pytest`, `pytest-cov` *(dev/testing only)*
+- `pytest`, `pytest-cov`, `ruff` *(dev/testing only)*
 
 ```bash
+# Core + optional integrations + dev tools (matches requirements.txt)
 pip install -r requirements.txt
+
+# From a clone, slimmer extras defined in pyproject.toml:
+#   pip install -e ".[salesforce]"     # simple-salesforce
+#   pip install -e ".[slack]"          # httpx
+#   pip install -e ".[integrations]"   # both
+#   pip install -e ".[dev]"            # pytest, pytest-cov, ruff
+# After `pip install -e .`, the console script `vhc-simplifier` calls main().
 ```
 
 ---
@@ -180,8 +187,7 @@ root cron daemon inside the image.
 | `--input-format` | `csv` | Input format: `csv` or `json` |
 | `--demo` | off | Use embedded sample data (no files needed) |
 | `--no-artifacts` | off | Skip writing `.md`/`.ps1`/`.json` files |
-| `--quiet` | off | Suppress console report |
-| `--verbose` | off | Enable verbose/debug logging |
+| `--quiet` | off | Suppress the default console report (`run_healthcheck(verbose=)` is the Python API; there is no `--verbose` flag) |
 | `--sf-account-id` | — | Salesforce Account ID for Task creation |
 | `--sf-username` | — | SF username (prefer `SF_USERNAME` env var) |
 | `--sf-password` | — | SF password (prefer `SF_PASSWORD` env var) |
@@ -202,7 +208,7 @@ These files are produced by running the [Veeam Health Check script](https://vee.
 | Repositories | `localhost_Repositories.csv` | `localhost_Repositories.json` |
 | Malware | `localhostmalware_events.csv` | `localhostmalware_events.json` |
 
-All files are optional — missing files are logged and skipped without aborting.
+All files are optional — missing files are logged and skipped without aborting. Exact `localhost_*` names are the VHC defaults; hostname-prefixed variants (for example `VBR01_Jobs.csv`) are also discovered.
 
 ---
 
@@ -221,7 +227,7 @@ python vhc_simplifier.py --demo --sf-account-id 001XXXXXXXXXXXX
 
 ### Slack
 
-Posts a severity summary to a Slack incoming webhook. Validates that the webhook URL uses HTTPS and targets `hooks.slack.com` or `hooks.slack-gov.com`:
+Posts a severity summary to a Slack incoming webhook. Accepts only `https://hooks.slack.com/services/...` and `https://hooks.slack-gov.com/services/...`:
 
 ```bash
 python vhc_simplifier.py --demo \
@@ -251,16 +257,16 @@ docker compose run --rm vhc-simplifier \
   --slack-webhook https://hooks.slack.com/services/T00/B00/xxx
 ```
 
-Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
+Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. The `Dockerfile` installs `pandas` only: Slack posting uses stdlib `urllib` when `httpx` is absent, and Salesforce Task creation needs `simple-salesforce`, which is not in the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
 
 ---
 
 ## Testing
 
-The test suite covers 219 tests across 6 files with 90%+ code coverage:
+The test suite collects **260** tests across 5 modules plus shared fixtures in `conftest.py` (CI `--cov-fail-under=80`):
 
-| Test File | Tests | Coverage |
-|---|---|---|
+| Test File | Purpose |
+|---|---|
 | `test_vhc_simplifier.py` | Core helpers, analyzers, loaders, enrichment, artifact writers, integration runs |
 | `test_coverage_gaps.py` | Edge cases: NaN handling, empty DataFrames, encoding, type coercion |
 | `test_vbr_server_simulation.py` | VBR v12.3.2 and v13 mock server simulation with realistic export data |
@@ -283,11 +289,11 @@ python -m pytest tests/test_vbr_server_simulation.py -v
 
 ## CI/CD Workflows
 
-Six GitHub Actions workflows run on every push and pull request to `main`:
+Seven GitHub Actions workflows live in `.github/workflows/`. CI, Ruff, Gitleaks, DevSkim, CodeQL, and Trivy run on push and pull request to `main` (Gitleaks, DevSkim, CodeQL, and Trivy also run weekly). Dependency Review runs on pull requests only.
 
 | Workflow | File | Purpose |
 |---|---|---|
-| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13 on ubuntu + windows), 80% coverage threshold |
+| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13 on ubuntu + windows), 80% coverage threshold, Docker image smoke test |
 | **Ruff** | `ruff.yml` | Python lint and format checks |
 | **Gitleaks** | `gitleaks.yml` | Secret scanning (push, PR, weekly) |
 | **DevSkim** | `devskim.yml` | Microsoft security anti-pattern detection (push, PR, weekly) |
@@ -321,7 +327,7 @@ Input (CSV / JSON / --demo)
   _run_analyzer()      <- fault isolation wrapper (records errors, never aborts)
         |
         v
-  analyze_*()          <- pure functions, domain-scoped (jobs, sessions, security, repos, malware)
+  analyze_*()          <- four pure functions (jobs+sessions, security, repos, malware)
         |
         v
   enrich_findings()    <- pattern-matched remediation + PS injection guard (_ps_quote)
