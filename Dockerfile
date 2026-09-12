@@ -8,7 +8,9 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends busybox-static \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir "pandas>=2.0.0"
+# pip<26.2 is CVE-2026-13346 (path traversal from a malicious index).
+RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.0" \
+    && pip install --no-cache-dir "pandas>=2.0.0"
 
 COPY vhc_simplifier.py .
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
