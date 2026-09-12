@@ -15,7 +15,7 @@ This project is a single-script utility (`vhc_simplifier.py`) and does not follo
 
 ## Scope
 
-This tool parses and summarizes Veeam Health Check HTML/JSON reports. Security considerations relevant to this project include:
+This tool parses and summarizes Veeam Health Check CSV/JSON exports. Security considerations relevant to this project include:
 
 - **Path traversal / arbitrary file read** — malicious input file paths passed to the script
 - **Unsafe deserialization** — processing of crafted/malformed Veeam report files
