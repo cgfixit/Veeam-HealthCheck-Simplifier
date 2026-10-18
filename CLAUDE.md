@@ -15,7 +15,7 @@ pip install -r requirements.txt
 # Run demo mode
 python vhc_simplifier.py --demo
 
-# Run all tests (260 collected; CI fails under 80% coverage)
+# Run all tests (275 collected; CI fails under 80% coverage)
 python -m pytest tests/ -v
 
 # Run with coverage

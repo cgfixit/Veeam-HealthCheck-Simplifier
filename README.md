@@ -192,7 +192,7 @@ root cron daemon inside the image.
 | `--sf-username` | — | SF username (prefer `SF_USERNAME` env var) |
 | `--sf-password` | — | SF password (prefer `SF_PASSWORD` env var) |
 | `--sf-token` | — | SF security token (prefer `SF_TOKEN` env var) |
-| `--slack-webhook` | — | Slack incoming webhook URL |
+| `--slack-webhook` | `VHC_SLACK_WEBHOOK` env | Slack incoming webhook URL (prefer the env var; the URL is a secret) |
 
 ---
 
@@ -263,7 +263,7 @@ Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed thr
 
 ## Testing
 
-The test suite collects **260** tests across 5 modules plus shared fixtures in `conftest.py` (CI `--cov-fail-under=80`):
+The test suite collects **275** tests across 5 modules plus shared fixtures in `conftest.py` (CI `--cov-fail-under=80`):
 
 | Test File | Purpose |
 |---|---|
@@ -348,7 +348,7 @@ Input (CSV / JSON / --demo)
 |---|---|
 | `0` | Success |
 | `1` | Unhandled exception |
-| `2` | Processing errors occurred (check stderr / logs) |
+| `2` | Processing errors occurred: missing/unreadable inputs, missing expected columns, analyzer, write, or integration failures (check the console report and `remediation_summary.md`) |
 
 ---
 
@@ -356,7 +356,10 @@ Input (CSV / JSON / --demo)
 
 - **Never commit credentials.** Use env vars (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) or a secrets manager.
 - **Review `-WhatIf` output before removing it.** Validate every command in a non-production environment first.
-- **Injection prevention.** Object names with ASCII control characters (`0x00-0x1F`, `0x7F`) are refused from PS command generation entirely.
+- **Injection prevention.** Object names with control characters (`0x00-0x1F`, `0x7F-0x9F`, `U+2028/2029`) are refused from PS command generation entirely. PowerShell also treats Unicode quotes (`U+2018-U+201B`) as single quotes, so they are doubled along with `'`. Report-derived text is Markdown-escaped and collapsed to one line in `remediation_summary.md`, `fixit.ps1` comments, and the console.
+- **Input validation.** Files over 256 MiB, non-regular files, and unreadable paths are skipped with an error. Missing expected columns, header-only files, ambiguous hostname-prefixed matches, and blank/unrecognized cells that are treated as non-compliant (fail-closed) are reported under *Errors* / *Data quality warnings* in the console and in a *Data Quality / Coverage* section of `remediation_summary.md`. Header names are matched case-, space-, and underscore-insensitively.
+- **Clean runs still write artifacts.** A run with zero findings overwrites `remediation_summary.md`, `fixit.ps1`, and `tickets.json` so stale output from a previous run never looks current.
+- **Salesforce.** The account ID must be a 15- or 18-character alphanumeric ID. Task creation failures are counted per task (partial writes are reported, not hidden). Passing `--sf-password`/`--sf-token` on the command line logs a warning.
 - **Slack webhook validation.** Only `https://hooks.slack.com/...` and `https://hooks.slack-gov.com/...` URLs are accepted.
 - **Service accounts & MFA.** Automation accounts used by this tool (Salesforce, Slack, and any scripted VBR REST API access) can't complete interactive MFA challenges — see [SECURITY.md](SECURITY.md#service-account--mfa-considerations) for guidance on scoping non-interactive credentials safely.
 

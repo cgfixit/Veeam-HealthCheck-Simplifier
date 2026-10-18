@@ -460,3 +460,125 @@ def test_post_slack_summary_httpx_passes_follow_redirects_false():
     _, kwargs = mock_httpx.post.call_args
     assert kwargs.get("follow_redirects") is False
     assert not result.errors
+
+
+def test_ps_quote_escapes_unicode_single_quotes():
+    assert vhc._ps_quote("a\u2019; Remove-Item C:; \u2019") == "'a\u2019\u2019; Remove-Item C:; \u2019\u2019'"
+    assert vhc._ps_quote("a\u2028b") is None
+
+
+def test_md_escape_neutralizes_structure():
+    out = vhc._md_escape("x\n## H\n[l](http://e) <b>`c`")
+    assert "\n" not in out
+    assert "\\[l\\]" in out and "\\<b\\>" in out and "\\`c\\`" in out
+
+
+def test_cp1252_even_length_file_not_decoded_as_utf16(tmp_path):
+    p = tmp_path / "localhost_Jobs.csv"
+    p.write_bytes("Name,RetentionCount\nM\u00fcller Jobx,3\n".encode("cp1252"))
+    assert len(p.read_bytes()) % 2 == 0
+    df = vhc._safe_load_csv(p, vhc.HealthCheckResult())
+    assert df is not None and df["Name"][0] == "M\u00fcller Jobx"
+
+
+def test_header_only_csv_warns(tmp_path):
+    p = tmp_path / "localhost_Repositories.csv"
+    p.write_text("Name,IsImmutabilitySupported\n")
+    result = vhc.HealthCheckResult()
+    assert vhc._safe_load_csv(p, result) is None
+    assert result.warnings == [
+        "localhost_Repositories.csv: contains headers but no data rows; section not analyzed"
+    ]
+
+
+def test_oversized_input_rejected(tmp_path):
+    p = tmp_path / "localhost_Jobs.csv"
+    p.write_text(vhc.EMBEDDED_JOBS)
+    result = vhc.HealthCheckResult()
+    with mock.patch.object(vhc, "MAX_INPUT_BYTES", 10):
+        assert vhc._safe_load_csv(p, result) is None
+    assert "exceeds" in result.errors[0]
+
+
+def test_directory_named_like_input_is_reported(tmp_path):
+    (tmp_path / "localhost_Jobs.csv").mkdir()
+    result = vhc.HealthCheckResult()
+    assert vhc._safe_load_csv(tmp_path / "localhost_Jobs.csv", result) is None
+    assert result.errors == ["localhost_Jobs.csv: not a regular file"]
+
+
+def test_validate_schema_reports_missing_required_columns():
+    result = vhc.HealthCheckResult()
+    df = pd.DataFrame([{"Practice": "MFA", "Result": "Not Implemented"}])
+    vhc._validate_schema("security", df, "sec.csv", result)
+    assert result.errors == [
+        "sec.csv: missing expected column(s) Best Practice, Status; related checks skipped. "
+        "Columns found: Practice, Result"
+    ]
+
+
+def test_validate_schema_normalizes_header_spelling():
+    result = vhc.HealthCheckResult()
+    df = pd.DataFrame([{"name": "R", "is_immutability_supported": "True"}])
+    df = vhc._validate_schema("repositories", df, "r.csv", result)
+    assert list(df.columns) == ["Name", "IsImmutabilitySupported"]
+    assert result.errors == [] and result.warnings == []
+
+
+def test_validate_schema_warns_on_fail_closed_cells():
+    result = vhc.HealthCheckResult()
+    df = pd.DataFrame(
+        [{"Name": "J", "RetentionCount": "lots", "RetainDaysToKeep": 30, "StgEncryptionEnabled": True}]
+    )
+    vhc._validate_schema("jobs", df, "j.csv", result)
+    assert result.warnings == [
+        "j.csv: 1 row(s) have blank or unrecognized RetentionCount; "
+        "treated as non-compliant - verify in the VBR console"
+    ]
+
+
+def test_ambiguous_input_files_warn(tmp_path):
+    (tmp_path / "srv2_malware_events.csv").write_text("x")
+    (tmp_path / "srv1_malware_events.csv").write_text("x")
+    result = vhc.HealthCheckResult()
+    path = vhc._resolve_input_file(tmp_path, "malware", "localhostmalware_events", "csv", result)
+    assert path.name == "srv1_malware_events.csv"
+    assert "Multiple malware files match" in result.warnings[0]
+
+
+def test_clean_run_overwrites_stale_artifacts(tmp_path):
+    (tmp_path / "localhost_Repositories.csv").write_text("Name,IsImmutabilitySupported\nR,True\n")
+    (tmp_path / "tickets.json").write_text('[{"stale": true}]')
+    out = vhc.run_healthcheck(input_dir=tmp_path, output_dir=tmp_path, verbose=False)
+    assert out["findings"] == []
+    assert (tmp_path / "tickets.json").read_text() == "[]"
+    assert "Data Quality / Coverage" in (tmp_path / "remediation_summary.md").read_text()
+
+
+def test_missing_input_dir_reported(tmp_path):
+    out = vhc.run_healthcheck(input_dir=tmp_path / "nope", write_artifacts=False, verbose=False)
+    assert f"Input directory not found or not a directory: {tmp_path / 'nope'}" in out["errors"]
+
+
+def test_salesforce_rejects_invalid_account_id():
+    result = vhc.HealthCheckResult()
+    with mock.patch.object(vhc, "HAS_SF", True):
+        vhc._push_to_salesforce([], "001'; DROP", result, username="u", password="p", token="t")
+    assert result.errors == ["Invalid Salesforce account ID: expected a 15- or 18-character alphanumeric ID"]
+
+
+def test_salesforce_partial_failure_counts_and_redacts():
+    result = vhc.HealthCheckResult()
+    sf = mock.MagicMock()
+    sf.Task.create.side_effect = [None, RuntimeError("boom secretpass")]
+    enriched = [{"severity": "High", "raw": f"f{i}", "cmd": "", "kb": ""} for i in range(2)]
+    with (
+        mock.patch.object(vhc, "HAS_SF", True),
+        mock.patch.dict(vhc.__dict__, {"Salesforce": lambda **_: sf}),
+    ):
+        vhc._push_to_salesforce(
+            enriched, "001000000000FAK", result, username="user@x.io", password="secretpass", token="tok999"
+        )
+    assert result.errors == [
+        "Salesforce error: 1 of 2 task(s) failed; 1 created. First error: boom <redacted>"
+    ]

@@ -230,6 +230,7 @@ class TestHealthCheckResultToDict:
             "artifacts": {},
             "missing_files": [],
             "errors": [],
+            "warnings": [],
             "sections": {},
         }
 
@@ -510,7 +511,7 @@ def test_push_salesforce_missing_library_records_error():
         ):
             vhc._push_to_salesforce(
                 [{"severity": "High", "raw": "x", "cmd": "", "kb": ""}],
-                "001FAKE",
+                "001000000000FAK",
                 result,
             )
     assert any("simple-salesforce" in e for e in result.errors)
@@ -524,7 +525,7 @@ def test_salesforce_error_redacts_credentials():
         with mock.patch.dict(vhc.__dict__, {"Salesforce": mock_sf_class}):
             vhc._push_to_salesforce(
                 enriched,
-                "001FAKE",
+                "001000000000FAK",
                 result,
                 username="user@example.com",
                 password="secretpass",
@@ -847,7 +848,7 @@ class TestIntegrationEdgeCases:
                 with mock.patch.dict(vhc.__dict__, {"Salesforce": mock_sf_class}):
                     vhc._push_to_salesforce(
                         [{"severity": "High", "raw": "x", "cmd": "", "kb": ""}],
-                        "001FAKE",
+                        "001000000000FAK",
                         result,
                     )
         assert any("Salesforce error" in e for e in result.errors)
@@ -877,7 +878,7 @@ class TestIntegrationEdgeCases:
                                 "kb": "",
                             },
                         ],
-                        "001FAKE",
+                        "001000000000FAK",
                         result,
                     )
         mock_sf.Task.create.assert_called_once()
