@@ -30,7 +30,6 @@ from typing import Any
 
 import pandas as pd
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 logger = logging.getLogger("vhc_simplifier")
 
 HAS_SF = importlib.util.find_spec("simple_salesforce") is not None
@@ -86,9 +85,31 @@ EXPECTED_BASENAMES: dict[str, str] = {
     "malware": "localhostmalware_events",
 }
 
-_TEXT_ENCODINGS = ("utf-8-sig", "utf-16", "utf-16-le", "utf-16-be", "cp1252")
-_PS_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "jobs": ("RetentionCount", "RetainDaysToKeep", "StgEncryptionEnabled"),
+    "sessions": ("JobName", "Status"),
+    "security": ("Best Practice", "Status"),
+    "repositories": ("IsImmutabilitySupported",),
+    "malware": ("Status",),
+}
+OPTIONAL_COLUMNS: dict[str, tuple[str, ...]] = {
+    "jobs": ("Name",),
+    "repositories": ("Name",),
+    "malware": ("ObjectName", "DetectionTime"),
+}
+FAIL_CLOSED_COLUMNS: dict[str, dict[str, str]] = {
+    "jobs": {"RetentionCount": "number", "RetainDaysToKeep": "number", "StgEncryptionEnabled": "bool"},
+    "repositories": {"IsImmutabilitySupported": "bool"},
+}
+MAX_INPUT_BYTES = 256 * 1024 * 1024
+
+_TEXT_ENCODINGS = ("utf-8-sig", "cp1252")
+_WIDE_ENCODINGS = ("utf-16", "utf-16-le", "utf-16-be", "utf-8-sig", "cp1252")
+_PS_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
+_PS_SINGLE_QUOTES = "'\u2018\u2019\u201a\u201b"
+_MD_SPECIAL = re.compile(r"([\\`*_\[\]<>~])")
 _NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
+_SF_ID_RE = re.compile(r"[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?")
 
 
 def _ps_quote(s: str) -> str | None:
@@ -96,7 +117,15 @@ def _ps_quote(s: str) -> str | None:
         s = str(s)
     if _PS_CONTROL_CHARS.search(s):
         return None
-    return "'" + s.replace("'", "''") + "'"
+    return "'" + "".join(c * 2 if c in _PS_SINGLE_QUOTES else c for c in s) + "'"
+
+
+def _one_line(text: Any) -> str:
+    return _PS_CONTROL_CHARS.sub(" ", str(text))
+
+
+def _md_escape(text: Any) -> str:
+    return _MD_SPECIAL.sub(r"\\\1", _one_line(text))
 
 
 def _find_unquoted_hash(cmd: str) -> int | None:
@@ -122,6 +151,7 @@ class HealthCheckResult:
     artifacts: dict[str, pathlib.Path] = field(default_factory=dict)
     missing_files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     sections: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -131,6 +161,7 @@ class HealthCheckResult:
             "artifacts": {k: str(v) for k, v in self.artifacts.items()},
             "missing_files": self.missing_files,
             "errors": self.errors,
+            "warnings": self.warnings,
             "sections": self.sections,
         }
 
@@ -145,9 +176,7 @@ def _clean_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _candidate_encodings(path: pathlib.Path) -> tuple[str, ...]:
     with path.open("rb") as f:
         sample = f.read(4096)
-    if b"\x00" in sample:
-        return ("utf-16", "utf-16-le", "utf-16-be", "utf-8-sig", "cp1252")
-    return _TEXT_ENCODINGS
+    return _WIDE_ENCODINGS if b"\x00" in sample else _TEXT_ENCODINGS
 
 
 def _read_text(path: pathlib.Path) -> str:
@@ -179,14 +208,26 @@ def _json_records(data: Any) -> Any:
     return nested if nested is not None else [data]
 
 
-def _resolve_input_file(input_dir: pathlib.Path, key: str, base: str, input_format: str) -> pathlib.Path:
+def _resolve_input_file(
+    input_dir: pathlib.Path,
+    key: str,
+    base: str,
+    input_format: str,
+    result: HealthCheckResult | None = None,
+) -> pathlib.Path:
     exact = input_dir / f"{base}.{input_format}"
     if exact.exists() or not input_dir.is_dir():
         return exact
 
     suffix = f".{input_format}".lower()
     candidates: list[pathlib.Path] = []
-    for path in input_dir.iterdir():
+    try:
+        entries = list(input_dir.iterdir())
+    except OSError as exc:
+        if result is not None:
+            result.errors.append(f"Cannot list input dir {input_dir}: {type(exc).__name__}: {exc}")
+        return exact
+    for path in entries:
         if not path.is_file() or path.suffix.lower() != suffix:
             continue
         stem = path.stem.lower()
@@ -200,33 +241,72 @@ def _resolve_input_file(input_dir: pathlib.Path, key: str, base: str, input_form
             candidates.append(path)
         elif key == "malware" and stem.endswith("malware_events"):
             candidates.append(path)
-    return sorted(candidates, key=lambda p: p.name.lower())[0] if candidates else exact
+    if not candidates:
+        return exact
+    candidates.sort(key=lambda p: p.name.lower())
+    if len(candidates) > 1 and result is not None:
+        result.warnings.append(
+            f"Multiple {key} files match ({', '.join(p.name for p in candidates)}); "
+            f"using {candidates[0].name}. Pass --input-dir per VBR server to avoid mixing exports."
+        )
+    return candidates[0]
+
+
+def _check_input_file(path: pathlib.Path, result: HealthCheckResult) -> bool:
+    try:
+        if not path.exists():
+            result.missing_files.append(path.name)
+            return False
+        if not path.is_file():
+            result.errors.append(f"{path.name}: not a regular file")
+            return False
+        size = path.stat().st_size
+    except OSError as exc:
+        result.errors.append(f"{path.name}: cannot access: {type(exc).__name__}: {exc}")
+        return False
+    if size == 0:
+        result.errors.append(f"{path.name}: empty")
+        return False
+    if size > MAX_INPUT_BYTES:
+        result.errors.append(
+            f"{path.name}: {size:,} bytes exceeds the {MAX_INPUT_BYTES:,}-byte input limit; skipped"
+        )
+        return False
+    return True
+
+
+def _no_rows(path: pathlib.Path, result: HealthCheckResult) -> None:
+    result.warnings.append(f"{path.name}: contains headers but no data rows; section not analyzed")
 
 
 def _safe_load_csv(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
-    if not path.exists():
-        result.missing_files.append(path.name)
+    if not _check_input_file(path, result):
         return None
-    if path.stat().st_size == 0:
-        result.errors.append(f"{path.name}: empty")
+    try:
+        encodings = _candidate_encodings(path)
+    except OSError as exc:
+        result.errors.append(f"{path.name}: cannot read: {type(exc).__name__}: {exc}")
         return None
 
     last_exc: Exception | None = None
-    for encoding in _candidate_encodings(path):
+    for encoding in encodings:
         try:
             df = pd.read_csv(path, encoding=encoding, encoding_errors="strict")
             df = _clean_columns(df)
-            return None if df.empty else df
         except Exception as exc:
             last_exc = exc
+            continue
+        if df.empty:
+            _no_rows(path, result)
+            return None
+        return df
     if last_exc is not None:
         result.errors.append(f"{path.name}: {type(last_exc).__name__}: {last_exc}")
     return None
 
 
 def _safe_load_json(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFrame | None:
-    if not path.exists():
-        result.missing_files.append(path.name)
+    if not _check_input_file(path, result):
         return None
     try:
         raw = _read_text(path)
@@ -236,10 +316,57 @@ def _safe_load_json(path: pathlib.Path, result: HealthCheckResult) -> pd.DataFra
             result.errors.append(f"{path.name}: bad JSON structure")
             return None
         df = _clean_columns(pd.DataFrame(records))
-        return df if not df.empty else None
+        if df.empty:
+            _no_rows(path, result)
+            return None
+        return df
     except Exception as e:
         result.errors.append(f"{path.name}: {type(e).__name__}: {e}")
         return None
+
+
+def _column_key(name: str) -> str:
+    return re.sub(r"[\s_]", "", name).casefold()
+
+
+def _validate_schema(key: str, df: pd.DataFrame, label: str, result: HealthCheckResult) -> pd.DataFrame:
+    """Normalize header spelling and report columns that would silently disable checks."""
+    expected = REQUIRED_COLUMNS.get(key, ()) + OPTIONAL_COLUMNS.get(key, ())
+    present = {_column_key(str(c)): c for c in df.columns}
+    renames = {
+        present[_column_key(col)]: col
+        for col in expected
+        if col not in df.columns and _column_key(col) in present
+    }
+    if renames:
+        df = df.rename(columns=renames)
+
+    missing_required = [c for c in REQUIRED_COLUMNS.get(key, ()) if c not in df.columns]
+    if missing_required:
+        found = ", ".join(str(c) for c in list(df.columns)[:12]) or "<none>"
+        result.errors.append(
+            f"{label}: missing expected column(s) {', '.join(missing_required)}; "
+            f"related checks skipped. Columns found: {found}"
+        )
+    missing_optional = [c for c in OPTIONAL_COLUMNS.get(key, ()) if c not in df.columns]
+    if missing_optional:
+        result.warnings.append(
+            f"{label}: missing column(s) {', '.join(missing_optional)}; affected values shown as <unknown>"
+        )
+
+    for col, kind in FAIL_CLOSED_COLUMNS.get(key, {}).items():
+        if col not in df.columns:
+            continue
+        if kind == "number":
+            unknown = sum(pd.isna(_to_number(v, float("nan"))) for v in df[col])
+        else:
+            unknown = sum(_to_bool(v, None) is None for v in df[col])
+        if unknown:
+            result.warnings.append(
+                f"{label}: {unknown} row(s) have blank or unrecognized {col}; "
+                "treated as non-compliant - verify in the VBR console"
+            )
+    return df
 
 
 def _load_embedded() -> dict[str, pd.DataFrame | None]:
@@ -279,7 +406,7 @@ def _to_number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _to_bool(value: Any, default: bool = False) -> bool:
+def _to_bool(value: Any, default: bool | None = False) -> bool | None:
     """Coerce a CSV/JSON cell to a bool.
 
     pandas reads empty cells as ``NaN`` (which is truthy), so ``not value`` is an
@@ -369,8 +496,8 @@ def analyze_jobs(jobs_df, sessions_df):
             failed = sessions_df[sessions_df["Status"].astype(str).str.strip().str.casefold() == "failed"]
             for job in failed["JobName"].dropna().unique():
                 findings.append(f"Recent job session failure: '{_str_cell(job)}'.")
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Session analysis skipped: %s: %s", type(exc).__name__, exc)
     return findings
 
 
@@ -547,7 +674,7 @@ def enrich_findings(raw: list[str]) -> list[dict[str, Any]]:
     return enriched
 
 
-def write_markdown(enriched, sections, out_path):
+def write_markdown(enriched, sections, out_path, notes=None):
     lines = [
         "# Veeam Health Check Remediation Summary",
         f"*Generated: {datetime.now(timezone.utc):%Y-%m-%d %H:%M UTC}*",
@@ -556,11 +683,16 @@ def write_markdown(enriched, sections, out_path):
     ]
     for s, items in sections.items():
         lines.append(f"- **{s}**: {len(items)} finding(s)")
+    if notes:
+        lines += ["", "## Data Quality / Coverage", "Results below may be incomplete:"]
+        lines += [f"- {_md_escape(n)}" for n in notes]
     lines += ["", "## Detailed Findings"]
+    if not enriched:
+        lines.append("No findings in the analyzed data.")
     for it in enriched:
         lines += [
             f"### {it['severity']} - {it['category']}",
-            f"**Finding:** {it['raw']}",
+            f"**Finding:** {_md_escape(it['raw'])}",
             f"**Impact:** {it['explain']}",
         ]
         if it["cmd"]:
@@ -587,7 +719,7 @@ def write_powershell_script(enriched, out_path):
         if cmd.lstrip().startswith(_MUTATING_VERBS) and "-WhatIf" not in cmd:
             h = _find_unquoted_hash(cmd)
             cmd = f"{cmd[:h].rstrip()} -WhatIf  {cmd[h:]}" if h is not None else f"{cmd} -WhatIf"
-        lines += [f"# {it['raw'].replace(chr(13), ' ').replace(chr(10), ' ')}", cmd, ""]
+        lines += [f"# {_one_line(it['raw'])}", cmd, ""]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
 
@@ -621,11 +753,18 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
     if not HAS_SF:
         result.errors.append("pip install simple-salesforce")
         return
+    if not isinstance(sf_account_id, str) or not _SF_ID_RE.fullmatch(sf_account_id):
+        result.errors.append("Invalid Salesforce account ID: expected a 15- or 18-character alphanumeric ID")
+        return
     try:
         sf = _get_salesforce_class()(username=username, password=password, security_token=token)
-        for e in enriched:
-            if e["severity"] not in ("High", "Medium"):
-                continue
+    except Exception as exc:
+        result.errors.append(f"Salesforce error: {_redact(str(exc), username, password, token)}")
+        return
+    todo = [e for e in enriched if e["severity"] in ("High", "Medium")]
+    failures: list[str] = []
+    for e in todo:
+        try:
             sf.Task.create(
                 {
                     "Subject": e["raw"][:80],
@@ -635,9 +774,15 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
                     "WhatId": sf_account_id,
                 }
             )
-        logger.info("Salesforce push complete")
-    except Exception as exc:
-        result.errors.append(f"Salesforce error: {_redact(str(exc), username, password, token)}")
+        except Exception as exc:
+            failures.append(_redact(str(exc), username, password, token))
+    if failures:
+        result.errors.append(
+            f"Salesforce error: {len(failures)} of {len(todo)} task(s) failed; "
+            f"{len(todo) - len(failures)} created. First error: {failures[0]}"
+        )
+    else:
+        logger.info("Salesforce push complete: %d task(s) created", len(todo))
 
 
 def _validate_slack_webhook(url: str) -> bool:
@@ -650,7 +795,7 @@ def _validate_slack_webhook(url: str) -> bool:
 
 
 def _redact(text: str, *secrets: str | None) -> str:
-    for secret in secrets:
+    for secret in sorted(filter(None, secrets), key=len, reverse=True):
         if secret:
             text = text.replace(secret, "<redacted>")
     return text
@@ -707,17 +852,22 @@ def _print_console_report(result: HealthCheckResult) -> None:
     for section, items in result.sections.items():
         print(f"## {section}")
         for f in items or []:
-            print(f"- {f}")
+            print(f"- {_one_line(f)}")
         print()
     if result.missing_files:
         print("## Missing files (graceful):")
         for f in result.missing_files:
-            print(f"- {f}")
+            print(f"- {_one_line(f)}")
         print()
     if result.errors:
-        print("## Errors / Warnings:")
+        print("## Errors:")
         for e in result.errors:
-            print(f"- {e}")
+            print(f"- {_one_line(e)}")
+        print()
+    if result.warnings:
+        print("## Data quality warnings:")
+        for w in result.warnings:
+            print(f"- {_one_line(w)}")
         print()
     if result.artifacts:
         print("## Artifacts written:")
@@ -788,15 +938,26 @@ def run_healthcheck(
             logger.exception(msg)
             dfs = {}
     else:
+        if not input_dir.is_dir():
+            result.errors.append(f"Input directory not found or not a directory: {input_dir}")
         loader = _safe_load_json if input_format == "json" else _safe_load_csv
         dfs = {}
         for key, base in EXPECTED_BASENAMES.items():
-            path = _resolve_input_file(input_dir, key, base, input_format)
-            dfs[key] = loader(path, result)
+            path = _resolve_input_file(input_dir, key, base, input_format, result)
+            df = loader(path, result)
+            if df is not None:
+                try:
+                    df = _validate_schema(key, df, path.name, result)
+                except Exception as e:
+                    result.errors.append(f"{path.name}: schema check failed: {type(e).__name__}: {e}")
+            dfs[key] = df
 
     missing = [k for k, v in dfs.items() if v is None]
     if missing and not demo:
-        msg = f"Graceful partial run - missing files: {', '.join(missing)}. Continuing with available data."
+        msg = (
+            f"Graceful partial run - missing or unusable inputs: {', '.join(missing)}. "
+            "Continuing with available data."
+        )
         result.errors.append(msg)
         logger.warning(msg)
 
@@ -815,7 +976,7 @@ def run_healthcheck(
     result.sections = sections
     result.enriched = _run_analyzer("Enrichment", enrich_findings, result, all_findings)
 
-    if write_artifacts and all_findings:
+    if write_artifacts:
         _write_artifact(
             result,
             "markdown",
@@ -823,6 +984,7 @@ def run_healthcheck(
             result.enriched,
             sections,
             output_dir / "remediation_summary.md",
+            result.errors + result.warnings,
         )
         _write_artifact(
             result,
@@ -865,8 +1027,18 @@ def main() -> int:
     p.add_argument("--sf-username", default=None)
     p.add_argument("--sf-password", default=None)
     p.add_argument("--sf-token", default=None)
-    p.add_argument("--slack-webhook", default=None)
+    p.add_argument(
+        "--slack-webhook",
+        default=os.getenv("VHC_SLACK_WEBHOOK"),
+        help="Slack incoming webhook URL (prefer the VHC_SLACK_WEBHOOK env var)",
+    )
     args = p.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    if args.sf_password or args.sf_token:
+        logger.warning(
+            "Secrets passed as CLI arguments are visible in shell history and process listings; "
+            "prefer the SF_PASSWORD/SF_TOKEN env vars."
+        )
     try:
         result = run_healthcheck(
             input_dir=args.input_dir,
