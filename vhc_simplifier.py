@@ -468,6 +468,10 @@ def _row_name(row: Any, default: str = "<unknown>") -> str:
     return _str_cell(row.get("Name"), default)
 
 
+def _unverified(col: str, known: bool) -> str:
+    return "" if known else f" [unverified: blank/unrecognized {col}]"
+
+
 def analyze_jobs(jobs_df, sessions_df):
     findings: list[str] = []
     if jobs_df is not None:
@@ -483,12 +487,24 @@ def analyze_jobs(jobs_df, sessions_df):
             names, retention_counts, retain_days, encrypted, strict=False
         ):
             job_name = _str_cell(name)
-            if has_retention_count and _to_number(retention_count) < CONFIG.recommended_min_retention_count:
-                findings.append(f"Job '{job_name}' has low retention count.")
-            if has_retain_days and _to_number(retain_days_to_keep) < CONFIG.recommended_retention_days:
-                findings.append(f"Job '{job_name}' keeps restore points < recommended.")
-            if has_encryption and not _to_bool(stg_encryption_enabled):
-                findings.append(f"Job '{job_name}' missing storage encryption.")
+            count = _to_number(retention_count, float("nan"))
+            if has_retention_count and not count >= CONFIG.recommended_min_retention_count:
+                findings.append(
+                    f"Job '{job_name}' has low retention count."
+                    f"{_unverified('RetentionCount', pd.notna(count))}"
+                )
+            days = _to_number(retain_days_to_keep, float("nan"))
+            if has_retain_days and not days >= CONFIG.recommended_retention_days:
+                findings.append(
+                    f"Job '{job_name}' keeps restore points < recommended."
+                    f"{_unverified('RetainDaysToKeep', pd.notna(days))}"
+                )
+            encrypted_flag = _to_bool(stg_encryption_enabled, None)
+            if has_encryption and not encrypted_flag:
+                findings.append(
+                    f"Job '{job_name}' missing storage encryption."
+                    f"{_unverified('StgEncryptionEnabled', encrypted_flag is not None)}"
+                )
     if sessions_df is not None:
         try:
             if "Status" not in sessions_df.columns or "JobName" not in sessions_df.columns:
@@ -532,8 +548,12 @@ def analyze_repositories(repo_df):
     names = repo_df["Name"] if "Name" in repo_df.columns else repeat(None, len(repo_df))
     for name, is_immutable_supported in zip(names, repo_df["IsImmutabilitySupported"], strict=False):
         repo_name = _str_cell(name)
-        if not _to_bool(is_immutable_supported):
-            findings.append(f"Repository '{repo_name}' does not support immutability.")
+        immutable = _to_bool(is_immutable_supported, None)
+        if not immutable:
+            findings.append(
+                f"Repository '{repo_name}' does not support immutability."
+                f"{_unverified('IsImmutabilitySupported', immutable is not None)}"
+            )
     return findings
 
 
@@ -768,7 +788,7 @@ def _push_to_salesforce(enriched, sf_account_id, result, username=None, password
             sf.Task.create(
                 {
                     "Subject": e["raw"][:80],
-                    "Description": f"{e['cmd']}\n\nKB: {e['kb']}",
+                    "Description": f"{e['raw']}\n\n{e['cmd']}\n\nKB: {e['kb']}",
                     "Priority": "High" if e["severity"] == "High" else "Normal",
                     "Status": "Not Started",
                     "WhatId": sf_account_id,
@@ -1008,6 +1028,8 @@ def run_healthcheck(
             _post_slack_summary(result.enriched, slack_webhook, result)
         else:
             result.errors.append("Invalid Slack webhook URL")
+    for warning in result.warnings:
+        logger.warning("Data quality: %s", _one_line(warning))
     if verbose:
         _print_console_report(result)
     return result.to_dict()
@@ -1032,8 +1054,20 @@ def main() -> int:
         default=os.getenv("VHC_SLACK_WEBHOOK"),
         help="Slack incoming webhook URL (prefer the VHC_SLACK_WEBHOOK env var)",
     )
+    p.add_argument(
+        "--log-file", default=None, help="Also append log records (incl. data-quality warnings) here"
+    )
     args = p.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    log_format = "%(asctime)s | %(levelname)s | %(message)s"
+    logging.basicConfig(level=logging.INFO, format=log_format)
+    if args.log_file:
+        try:
+            handler = logging.FileHandler(args.log_file, encoding="utf-8")
+        except OSError as exc:
+            logger.error("Cannot open log file %s: %s: %s", args.log_file, type(exc).__name__, exc)
+        else:
+            handler.setFormatter(logging.Formatter(log_format))
+            logging.getLogger().addHandler(handler)
     if args.sf_password or args.sf_token:
         logger.warning(
             "Secrets passed as CLI arguments are visible in shell history and process listings; "

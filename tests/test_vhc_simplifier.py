@@ -582,3 +582,58 @@ def test_salesforce_partial_failure_counts_and_redacts():
     assert result.errors == [
         "Salesforce error: 1 of 2 task(s) failed; 1 created. First error: boom <redacted>"
     ]
+
+
+def test_fail_closed_findings_are_tagged_unverified():
+    jobs = pd.DataFrame(
+        [
+            {
+                "Name": "Bad",
+                "RetentionCount": "lots",
+                "RetainDaysToKeep": None,
+                "StgEncryptionEnabled": "maybe",
+            },
+            {"Name": "Low", "RetentionCount": 3, "RetainDaysToKeep": 10, "StgEncryptionEnabled": False},
+        ]
+    )
+    findings = vhc.analyze_jobs(jobs, None)
+    assert "Job 'Bad' has low retention count. [unverified: blank/unrecognized RetentionCount]" in findings
+    assert (
+        "Job 'Bad' missing storage encryption. [unverified: blank/unrecognized StgEncryptionEnabled]"
+        in findings
+    )
+    assert "Job 'Low' has low retention count." in findings
+    repos = pd.DataFrame([{"Name": "R1", "IsImmutabilitySupported": None}])
+    assert vhc.analyze_repositories(repos) == [
+        "Repository 'R1' does not support immutability."
+        " [unverified: blank/unrecognized IsImmutabilitySupported]"
+    ]
+    assert vhc.enrich_findings(findings)[0]["severity"] == "Medium"
+
+
+def test_data_quality_warnings_are_logged(tmp_path, caplog):
+    (tmp_path / "localhost_Repositories.csv").write_text("Name,IsImmutabilitySupported\nR1,\n")
+    with caplog.at_level("WARNING", logger="vhc_simplifier"):
+        vhc.run_healthcheck(input_dir=tmp_path, write_artifacts=False, verbose=False)
+    assert any(
+        "Data quality: localhost_Repositories.csv: 1 row(s) have blank or unrecognized "
+        "IsImmutabilitySupported" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_log_file_flag_persists_warnings(tmp_path, monkeypatch):
+    (tmp_path / "localhost_Repositories.csv").write_text("Name,IsImmutabilitySupported\nR1,\n")
+    log = tmp_path / "vhc.log"
+    argv = ["vhc", "--input-dir", str(tmp_path), "--no-artifacts", "--quiet", "--log-file", str(log)]
+    monkeypatch.setattr(sys, "argv", argv)
+    root = vhc.logging.getLogger()
+    before = list(root.handlers)
+    try:
+        vhc.main()
+    finally:
+        for h in root.handlers[:]:
+            if h not in before:
+                root.removeHandler(h)
+                h.close()
+    assert "Data quality: localhost_Repositories.csv" in log.read_text(encoding="utf-8")
