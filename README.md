@@ -206,10 +206,44 @@ need monitoring; a passing gate does not mean the image has no vulnerabilities. 
 extraction, which the application does not invoke; removing the package
 removes that dependency exposure without claiming a demonstrated application exploit. Containers
 still share the host kernel. Keep the Compose restrictions and use a dedicated VM when a
-separate kernel is required; this change does not remove the base image's shell or other OS tools.
+separate kernel is required. The image retains its shell and OS libraries, but removes the unused
+`infocmp` executable and strips set-user-ID/set-group-ID permissions from regular files. The
+application does not need privileged login, password-changing, or mount tools. Custom image
+builds that install additional packages should repeat this hardening after installation.
 Pip is removed after installing runtime dependencies, including its unused vendored packages.
 To add optional integrations, include them in the Dockerfile's dependency-install step when
 building a custom image; package installation is not part of container startup.
+
+### Remaining container HIGH findings
+
+Assessment of the Python 3.14 slim image based on Debian trixie, 2026-10-19. Trivy reports
+44 HIGH package findings for eight distinct CVEs. The scanner maps Debian source packages
+to multiple binary packages; that does not prove the affected program is installed or called.
+No application input-to-vulnerable-operation path was found: CSV/JSON handling and artifact
+writes use Python, and the scheduler launches only the fixed Python CLI without a shell.
+
+| CVE | Affected operation | Reachability and action |
+| --- | --- | --- |
+| [CVE-2025-69720](https://security-tracker.debian.org/tracker/CVE-2025-69720) | `infocmp` terminal-data analysis | Previously installed but never called by the application. Remove the executable; retain ncurses libraries needed by other base-image components. This removes the affected tool, not the source-package version finding. |
+| [CVE-2026-16742](https://github.com/systemd/systemd/security/advisories/GHSA-jm29-p7hh-vjhv) | `systemd-homed` identity authentication | The image has systemd libraries, but neither homed/homework nor a homed-managed user. No affected authentication path. |
+| [CVE-2026-54369](https://security-tracker.debian.org/tracker/CVE-2026-54369) | Privileged pathname-based libacl operations | No ACL API/utility caller in the application. Ordinary CSV/JSON/demo execution does not load libacl; running non-root also removes the privileged-caller precondition. Retain the library for OS dependencies. |
+| [CVE-2026-76642](https://github.com/util-linux/util-linux/security/advisories/GHSA-m25x-3hj9-m26f) | Failed mount helper followed by privileged post-hooks | No application mount calls or fstab entries. Remove set-ID permissions, including from mount; keep Compose's capability drop and no-new-privileges. Host-created Docker volumes do not call the image's mount utility. |
+| [CVE-2026-78408](https://github.com/util-linux/util-linux/security/advisories/GHSA-55fx-f4gg-cfhj) | Privileged `nsenter --join-cgroup` leaks an open cgroup descriptor | The application never invokes nsenter. An affected **host** nsenter can still pass authority through an inherited descriptor even to a process with zero capabilities. Patch the host tool or avoid this option; image permissions cannot repair that host path. |
+| [CVE-2026-78409](https://github.com/util-linux/util-linux/security/advisories/GHSA-8f2p-47x3-43mv) | `X-mount.subdir` path resolution | No authorized fstab mount configuration or application mount calls. Set-ID removal and Compose restrictions prevent the ordinary privileged mount path. |
+| [CVE-2026-78410](https://github.com/util-linux/util-linux/security/advisories/GHSA-rh77-686x-2f2m) | Restricted SUID bind-mount source race | No fstab entries or mount caller; mount no longer has its SUID bit. Preserve the Compose restrictions. |
+| [CVE-2026-9538](https://security-tracker.debian.org/tracker/CVE-2026-9538) | Perl `Archive::Tar` allocation from a crafted tar header | `perl-base` is installed, but `Archive::Tar` is absent and the application never invokes Perl. No affected archive reader. |
+
+The container regressions check these runtime assumptions alongside scheduled/ordinary artifact
+generation and shutdown. The CSV/JSON/demo probe records subprocess launches and checks loaded
+libraries; it is evidence for those paths, not an exhaustive proof for arbitrary custom code.
+Reassess if custom images add services, modules, privileged operations, or host namespace access.
+`docker run` alone does not apply Compose's runtime restrictions.
+
+Debian trixie has no fixed package versions for these findings at the assessment date. Keep the
+full Trivy reports visible: removing `infocmp` and stripping set-ID permissions do not change
+the package-version results. Do not purge Essential packages, replace trixie libraries with
+testing/unstable packages, or suppress CVEs solely to lower the count. Track stable updates;
+the libacl fix changes its ABI and Debian has deferred the Perl update pending regressions.
 
 ---
 

@@ -18,6 +18,10 @@ RUN python -m py_compile vhc_simplifier.py docker_entrypoint.py
 
 RUN useradd --create-home --shell /bin/bash vhc \
     && chown -R vhc:vhc /app
+
+# infocmp contains CVE-2025-69720; the application needs neither it nor set-ID tools.
+RUN rm -f /usr/bin/infocmp \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} +
 USER vhc
 
 ENTRYPOINT ["python", "/app/docker_entrypoint.py"]
