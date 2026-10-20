@@ -62,6 +62,55 @@ print(f'uid={os.getuid()}, rootfs=read-only, capabilities=0, no-new-privileges=1
 """
         print(docker("run", "--rm", *self.flags, "--entrypoint", "python", IMAGE, "-c", probe))
 
+    def test_reported_cve_boundaries(self):
+        probe = """
+import io, os, pathlib, shutil, stat, subprocess, sys, tempfile
+assert shutil.which('infocmp') is None
+status = dict(line.split(':', 1) for line in pathlib.Path('/proc/self/status').read_text().splitlines())
+for field in ('CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb'):
+    assert int(status[field].strip(), 16) == 0, (field, status[field])
+for name in ('systemd-homed', 'systemd-homework', 'homectl'):
+    assert shutil.which(name) is None
+    for directory in ('/usr/lib/systemd', '/lib/systemd'):
+        assert not (pathlib.Path(directory) / name).exists()
+assert not any(line.split('#', 1)[0].strip() for line in pathlib.Path('/etc/fstab').read_text().splitlines())
+if shutil.which('perl'):
+    result = subprocess.run(['perl', '-MArchive::Tar', '-e', '1'], capture_output=True, text=True, timeout=10)
+    assert result.returncode != 0 and "Can't locate Archive/Tar.pm" in result.stderr, result
+def fail_walk(error):
+    raise error
+for directory, _, names in os.walk('/usr', onerror=fail_walk):
+    for name in names:
+        path = pathlib.Path(directory) / name
+        mode = path.lstat().st_mode
+        assert not (stat.S_ISREG(mode) and mode & 0o6000), path
+
+# Record child execution while exercising the actual CSV, JSON and demo paths.
+executions = []
+sys.addaudithook(lambda event, args: executions.append(event)
+                if event in ('subprocess.Popen', 'os.system', 'os.exec', 'os.posix_spawn') else None)
+import vhc_simplifier as app
+samples = {'jobs': app.EMBEDDED_JOBS, 'sessions': app.EMBEDDED_SESSIONS,
+           'security': app.EMBEDDED_SECURITY, 'repositories': app.EMBEDDED_REPOS,
+           'malware': app.EMBEDDED_MALWARE}
+with tempfile.TemporaryDirectory() as directory:
+    for format in ('csv', 'json'):
+        for key, sample in samples.items():
+            path = pathlib.Path(directory) / (app.EXPECTED_BASENAMES[key] + '.' + format)
+            path.write_text(sample if format == 'csv' else
+                            app.pd.read_csv(io.StringIO(sample)).to_json(orient='records'))
+        result = app.run_healthcheck(input_dir=directory, input_format=format,
+                                    write_artifacts=False, verbose=False)
+        assert not result['errors'], result['errors']
+    result = app.run_healthcheck(demo=True, write_artifacts=False, verbose=False)
+    assert not result['errors'], result['errors']
+assert not executions, executions
+assert '/libacl.so' not in pathlib.Path('/proc/self/maps').read_text()
+print('CVE boundaries: infocmp absent; no set-ID files under /usr; homed/Archive::Tar absent; '
+      'no fstab entries; all capability sets zero; CSV/JSON/demo spawn no commands and load no libacl')
+"""
+        print(docker("run", "--rm", *self.flags, "--entrypoint", "python", IMAGE, "-c", probe))
+
     def test_standard_execution_and_empty_schedule(self):
         for environment in ([], ["-e", "CRON_SCHEDULE="]):
             with self.subTest(environment=environment):
