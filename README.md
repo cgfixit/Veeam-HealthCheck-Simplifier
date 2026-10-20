@@ -162,19 +162,54 @@ docker run --rm \
 ```
 
 For recurring runs, set the `CRON_SCHEDULE` env var (standard 5-field cron syntax) and the
-container stays running in the foreground under `busybox crond`, re-invoking the CLI with
-whatever arguments you pass on each scheduled tick:
+container stays running under a small Python scheduler using `cronsim`, re-invoking the CLI
+with the exact arguments you pass on each scheduled tick. No BusyBox or OS cron package is installed:
 
 ```bash
 docker run -d --name vhc-simplifier \
+  --read-only --cap-drop=ALL --security-opt=no-new-privileges:true --tmpfs /tmp \
   -e CRON_SCHEDULE="0 6 * * *" \
   -v $(pwd)/vhc-exports:/app/input:ro \
   -v $(pwd)/output:/app/output \
   vhc-simplifier --input-dir /app/input --output-dir /app/output
 ```
 
-The container always runs as the non-root `vhc` user, including the cron process — there is no
-root cron daemon inside the image.
+The container runs as the non-root `vhc` user in both modes. The scheduler writes no crontab,
+PID file, or spool; only the output mount and temporary scratch space need to be writable.
+Ensure the output mount is writable by the image's `vhc` UID. With `CRON_SCHEDULE` unset or
+empty, the entrypoint replaces itself with the CLI and preserves its exit status.
+
+Scheduling accepts five fields with lists, ranges, steps, and month/weekday names. Invalid
+expressions, newlines, six-field schedules, and macros such as `@daily` fail at startup with
+status 2. Times use `/etc/localtime` (UTC in the image), or an IANA `TZ` such as
+`America/New_York`. `cronsim` handles DST using that timezone. Runs never overlap; missed
+ticks during downtime or a long run are skipped. A failed run is logged and the next run
+still occurs. Container termination forwards the signal to the active CLI and waits for it;
+Docker's stop timeout still bounds shutdown.
+
+Day-of-month and day-of-week follow Debian/Vixie cron semantics: if either starts with `*`,
+both must match; otherwise either may match. This differs from BusyBox for expressions such
+as `0 0 */2 * MON` (now odd calendar days that are Mondays, rather than odd days or Mondays).
+Review existing expressions that combine both day fields when upgrading.
+
+The Python runner uses a cron parser with no transitive dependencies, avoiding a custom cron grammar.
+Debian `cron` adds daemon/spool and privilege assumptions; Supercronic is container-friendly
+but adds an architecture-specific native binary. The application itself remains a single-file
+CLI and does not require `cronsim` when installed from `pyproject.toml` without development extras.
+
+The base image is pinned by digest and checked weekly by Dependabot. Trivy retains full
+SARIF reports, including unfixed upstream findings, and separately fails CI on fixable
+HIGH/CRITICAL vulnerabilities. The `Trivy (filesystem)` and `Trivy (container image)` checks
+must be required in branch rules to prevent merging a failing change. Unfixed findings still
+need monitoring; a passing gate does not mean the image has no vulnerabilities. The
+[BusyBox alert](https://security-tracker.debian.org/tracker/CVE-2026-90954) concerns `.deb`
+extraction, which the application does not invoke; removing the package
+removes that dependency exposure without claiming a demonstrated application exploit. Containers
+still share the host kernel. Keep the Compose restrictions and use a dedicated VM when a
+separate kernel is required; this change does not remove the base image's shell or other OS tools.
+Pip is removed after installing runtime dependencies, including its unused vendored packages.
+To add optional integrations, include them in the Dockerfile's dependency-install step when
+building a custom image; package installation is not part of container startup.
 
 ---
 
@@ -258,7 +293,7 @@ docker compose run --rm vhc-simplifier \
   --slack-webhook https://hooks.slack.com/services/T00/B00/xxx
 ```
 
-Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. The `Dockerfile` installs `pandas` only: Slack posting uses stdlib `urllib` when `httpx` is absent, and Salesforce Task creation needs `simple-salesforce`, which is not in the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
+Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. The `Dockerfile` installs `pandas` and the container-only `cronsim` parser: Slack posting uses stdlib `urllib` when `httpx` is absent, and Salesforce Task creation needs `simple-salesforce`, which is not in the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
 
 ---
 
@@ -294,13 +329,13 @@ Seven GitHub Actions workflows live in `.github/workflows/`. CI, Ruff, Gitleaks,
 
 | Workflow | File | Purpose |
 |---|---|---|
-| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13 on ubuntu + windows), 80% coverage threshold, Docker image smoke test |
+| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13 on ubuntu + windows), 80% coverage threshold, scheduled/standard Docker checks under non-root and read-only restrictions |
 | **Ruff** | `ruff.yml` | Python lint and format checks |
 | **Gitleaks** | `gitleaks.yml` | Secret scanning (push, PR, weekly) |
 | **DevSkim** | `devskim.yml` | Microsoft security anti-pattern detection (push, PR, weekly) |
 | **CodeQL** | `codeql.yml` | GitHub static analysis (push, PR, weekly) |
 | **Dependency Review** | `dependency-review.yml` | Supply chain vulnerability checks on PRs |
-| **Trivy** | `trivy.yml` | Container/dependency vulnerability scanning (filesystem + Docker image), SARIF → GitHub code scanning (push, PR, weekly) |
+| **Trivy** | `trivy.yml` | Filesystem + image scans; full SARIF reports and a fixable HIGH/CRITICAL gate (push, PR, weekly) |
 
 ---
 

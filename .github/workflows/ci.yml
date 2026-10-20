@@ -50,13 +50,13 @@ jobs:
           pip install --no-cache-dir ruff==0.15.20
 
       - name: Ruff lint check
-        run: ruff check --output-format=github vhc_simplifier.py tests/
+        run: ruff check --output-format=github vhc_simplifier.py docker_entrypoint.py tests/
 
       - name: Ruff format check
-        run: ruff format --check vhc_simplifier.py tests/
+        run: ruff format --check vhc_simplifier.py docker_entrypoint.py tests/
 
       - name: Check syntax and import errors
-        run: ruff check --select=E9,F63,F7,F82 --output-format=full vhc_simplifier.py tests/
+        run: ruff check --select=E9,F63,F7,F82 --output-format=full vhc_simplifier.py docker_entrypoint.py tests/
 
       - name: Verify module imports cleanly
         run: python -c "import vhc_simplifier; print('Module loaded successfully')"
@@ -139,5 +139,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t vhc-simplifier:ci .
 
-      - name: Run demo in container
-        run: docker run --rm vhc-simplifier:ci --demo --quiet --no-artifacts
+      - name: Verify scheduled and standard execution in a restricted container
+        env:
+          VHC_TEST_IMAGE: vhc-simplifier:ci
+        run: python3 tests/test_container.py

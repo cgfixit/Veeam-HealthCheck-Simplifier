@@ -30,7 +30,7 @@ jobs:
         run: pip install --no-cache-dir ruff==0.15.20
 
       - name: Ruff lint check
-        run: ruff check --output-format=github vhc_simplifier.py tests/
+        run: ruff check --output-format=github vhc_simplifier.py docker_entrypoint.py tests/
 
       - name: Ruff format check
-        run: ruff format --check vhc_simplifier.py tests/
+        run: ruff format --check vhc_simplifier.py docker_entrypoint.py tests/
