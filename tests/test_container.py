@@ -1,0 +1,159 @@
+"""Real image checks: VHC_TEST_IMAGE=vhc-simplifier:ci python tests/test_container.py."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import tempfile
+import time
+import unittest
+import uuid
+from pathlib import Path
+
+IMAGE = os.environ.get("VHC_TEST_IMAGE")
+
+
+def docker(*args, timeout=30):
+    result = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
+    if result.returncode:
+        raise AssertionError(f"docker {args[0]} exited {result.returncode}: {result.stdout}\n{result.stderr}")
+    return result.stdout.strip()
+
+
+@unittest.skipUnless(IMAGE, "Set VHC_TEST_IMAGE to exercise a built container")
+class ContainerTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.output = Path(self.tempdir.name)
+        self.output.chmod(0o777)
+        self.target = "/output with spaces;$(touch injected)'\""
+        self.flags = [
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges:true",
+            "--tmpfs=/tmp",
+            "-e",
+            "VHC_SLACK_WEBHOOK=",
+            "-v",
+            f"{self.output}:{self.target}",
+        ]
+
+    def test_nonroot_readonly_and_no_busybox(self):
+        probe = """
+import errno, os, pathlib, shutil, subprocess
+assert os.getuid() != 0
+status = pathlib.Path('/proc/self/status').read_text().splitlines()
+assert 'NoNewPrivs:\t1' in status
+assert 'CapEff:\t0000000000000000' in status
+assert shutil.which('busybox') is None
+packages = subprocess.check_output(['dpkg-query', '-W', '-f=${binary:Package}\\n'], text=True)
+assert not {'busybox', 'busybox-static'} & {p.split(':')[0] for p in packages.splitlines()}
+try:
+    pathlib.Path('/app/readonly-probe').write_text('must fail')
+except OSError as exc:
+    assert exc.errno == errno.EROFS, exc
+else:
+    raise AssertionError('Root filesystem was writable')
+pathlib.Path('/tmp/scratch-probe').write_text('allowed')
+print(f'uid={os.getuid()}, rootfs=read-only, capabilities=0, no-new-privileges=1, busybox=absent')
+"""
+        print(docker("run", "--rm", *self.flags, "--entrypoint", "python", IMAGE, "-c", probe))
+
+    def test_standard_execution_and_empty_schedule(self):
+        for environment in ([], ["-e", "CRON_SCHEDULE="]):
+            with self.subTest(environment=environment):
+                docker(
+                    "run",
+                    "--rm",
+                    *self.flags,
+                    *environment,
+                    IMAGE,
+                    "--demo",
+                    "--quiet",
+                    "--output-dir",
+                    self.target,
+                )
+                self.assert_artifacts()
+
+    def assert_artifacts(self):
+        for name in ("remediation_summary.md", "fixit.ps1", "tickets.json"):
+            self.assertGreater((self.output / name).stat().st_size, 0)
+
+    def test_invalid_schedule_exits_without_running(self):
+        result = subprocess.run(
+            ["docker", "run", "--rm", *self.flags, "-e", "CRON_SCHEDULE=* * * * * *", IMAGE],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("Invalid CRON_SCHEDULE", result.stderr)
+        self.assertEqual(list(self.output.iterdir()), [])
+
+    def test_scheduled_execution_and_termination(self):
+        name = f"vhc-schedule-{uuid.uuid4().hex}"
+        docker(
+            "run",
+            "-d",
+            "--name",
+            name,
+            *self.flags,
+            "-e",
+            "CRON_SCHEDULE=* * * * *",
+            IMAGE,
+            "--demo",
+            "--quiet",
+            "--output-dir",
+            self.target,
+        )
+        self.addCleanup(lambda: docker("rm", "-f", name))
+        # Exercise the same runner with a long-lived child to verify signal forwarding.
+        child_script = self.output / "child.py"
+        child_script.write_text(
+            "import pathlib, signal, sys, time\n"
+            f"output = pathlib.Path({self.target!r})\n"
+            "def stop(*_):\n"
+            "    (output / 'child-stopped').write_text('SIGTERM received')\n"
+            "    sys.exit(0)\n"
+            "signal.signal(signal.SIGTERM, stop)\n"
+            "(output / 'child-started').write_text('running')\n"
+            "while True: time.sleep(1)\n",
+            encoding="utf-8",
+        )
+        child_name = f"vhc-child-{uuid.uuid4().hex}"
+        docker(
+            "run",
+            "-d",
+            "--name",
+            child_name,
+            *self.flags,
+            "--mount",
+            f"type=bind,source={child_script},target=/app/vhc_simplifier.py,readonly",
+            "-e",
+            "CRON_SCHEDULE=* * * * *",
+            IMAGE,
+        )
+        self.addCleanup(lambda: docker("rm", "-f", child_name))
+        deadline = time.monotonic() + 75
+        while time.monotonic() < deadline:
+            result = subprocess.run(["docker", "logs", name], capture_output=True, text=True, timeout=10)
+            if (
+                (self.output / "tickets.json").exists()
+                and (self.output / "child-started").exists()
+                and (result.stdout + result.stderr).count("Next scheduled run:") >= 2
+            ):
+                break
+            time.sleep(0.25)
+        else:
+            self.fail(f"Scheduled CLI did not complete: {docker('inspect', name)}")
+        self.assert_artifacts()
+        docker("stop", "--time", "5", child_name)
+        self.assertTrue((self.output / "child-stopped").exists())
+        self.assertEqual(docker("inspect", "--format", "{{.State.ExitCode}}", child_name), "0")
+        docker("stop", "--time", "5", name)
+        self.assertEqual(docker("inspect", "--format", "{{.State.ExitCode}}", name), "0")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -19,14 +19,8 @@ services:
       SF_USERNAME: ${SF_USERNAME:-}
       SF_PASSWORD: ${SF_PASSWORD:-}
       SF_TOKEN: ${SF_TOKEN:-}
-      # Optional passthrough, forward-compatible with cron-mode support that
-      # may land in the base image. Unused (and harmless) if the image
-      # doesn't read it.
+      # Optional standard five-field cron expression; empty runs the CLI once.
       CRON_SCHEDULE: ${CRON_SCHEDULE:-}
-      # Required under read_only: true below — without it, Python may try to
-      # write .pyc cache files for imported packages (e.g. pandas) at runtime
-      # and fail because the root filesystem is read-only.
-      PYTHONDONTWRITEBYTECODE: "1"
     volumes:
       - ./vhc-exports:/app/input:ro
       - ./output:/app/output
@@ -39,7 +33,4 @@ services:
       - "ALL"
     tmpfs:
       # Writable scratch space carved out of the read-only root filesystem.
-      # /home/vhc/crontabs is where optional cron-mode support (if present in
-      # the image) would need to write; harmless if that feature isn't there.
-      - /home/vhc/crontabs
       - /tmp
