@@ -114,6 +114,7 @@ def test_stop_during_spawn_reaches_new_child(monkeypatch):
 
 
 @pytest.mark.parametrize("schedule", [None, ""])
+@pytest.mark.skipif(os.name == "nt", reason="The container entrypoint requires POSIX exec semantics")
 def test_standard_execution_keeps_arguments_and_exit_codes(tmp_path, schedule):
     env = os.environ | {"VHC_SLACK_WEBHOOK": ""}
     env.pop("CRON_SCHEDULE", None)

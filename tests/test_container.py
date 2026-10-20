@@ -41,12 +41,14 @@ class ContainerTests(unittest.TestCase):
 
     def test_nonroot_readonly_and_no_busybox(self):
         probe = """
-import errno, os, pathlib, shutil, subprocess
+import errno, importlib.util, os, pathlib, shutil, subprocess
 assert os.getuid() != 0
 status = pathlib.Path('/proc/self/status').read_text().splitlines()
 assert 'NoNewPrivs:\t1' in status
 assert 'CapEff:\t0000000000000000' in status
 assert shutil.which('busybox') is None
+assert shutil.which('pip') is None
+assert importlib.util.find_spec('pip') is None
 packages = subprocess.check_output(['dpkg-query', '-W', '-f=${binary:Package}\\n'], text=True)
 assert not {'busybox', 'busybox-static'} & {p.split(':')[0] for p in packages.splitlines()}
 try:
@@ -56,7 +58,7 @@ except OSError as exc:
 else:
     raise AssertionError('Root filesystem was writable')
 pathlib.Path('/tmp/scratch-probe').write_text('allowed')
-print(f'uid={os.getuid()}, rootfs=read-only, capabilities=0, no-new-privileges=1, busybox=absent')
+print(f'uid={os.getuid()}, rootfs=read-only, capabilities=0, no-new-privileges=1, busybox=absent, pip=absent')
 """
         print(docker("run", "--rm", *self.flags, "--entrypoint", "python", IMAGE, "-c", probe))
 

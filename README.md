@@ -207,6 +207,9 @@ extraction, which the application does not invoke; removing the package
 removes that dependency exposure without claiming a demonstrated application exploit. Containers
 still share the host kernel. Keep the Compose restrictions and use a dedicated VM when a
 separate kernel is required; this change does not remove the base image's shell or other OS tools.
+Pip is removed after installing runtime dependencies, including its unused vendored packages.
+To add optional integrations, include them in the Dockerfile's dependency-install step when
+building a custom image; package installation is not part of container startup.
 
 ---
 

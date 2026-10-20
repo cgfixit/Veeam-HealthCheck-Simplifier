@@ -9,7 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 # pip<26.2 is CVE-2026-13346 (path traversal from a malicious index).
 RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.0" \
-    && pip install --no-cache-dir "pandas>=2.0.0" "cronsim==2.7"
+    && pip install --no-cache-dir "pandas>=2.0.0" "cronsim==2.7" \
+    && python -m pip uninstall --yes pip
 
 COPY vhc_simplifier.py docker_entrypoint.py ./
 
