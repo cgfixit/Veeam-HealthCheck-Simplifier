@@ -7,6 +7,11 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
+# Pull Debian security fixes newer than the base digest (apt CVE-2026-109518, libsqlite3, etc.).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # pip<26.2 is CVE-2026-13346 (path traversal from a malicious index).
 RUN python -m pip install --no-cache-dir --upgrade "pip>=26.2.0" \
     && pip install --no-cache-dir "pandas>=2.0.0" "cronsim==2.7" \
