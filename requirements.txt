@@ -6,7 +6,7 @@
 pandas>=2.0.0
 
 # Container scheduler (also needed by its regression tests)
-cronsim==2.7
+cronsim==2.8
 
 # Optional integrations (install only what you need)
 simple-salesforce>=1.12.10  # --sf-account-id: Salesforce Task creation
