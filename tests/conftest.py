@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 
-# ── VBR v12.3.2 (build 12.3.2.4643) realistic export data ──────────
+# ── VBR v12.3.2 (simulated, not build-specific) realistic export data ─
 
 VBR_V12_3_2_JOBS = """\
 Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled
@@ -79,7 +79,7 @@ ObjectName,Status,DetectionTime
 """
 
 
-# ── VBR v13 (latest build 13.0.x) realistic export data ─────────────
+# ── VBR v13 (simulated, not build-specific) realistic export data ───
 
 VBR_V13_JOBS = """\
 Name,RetentionCount,RetainDaysToKeep,StgEncryptionEnabled,ObjectStorageTier,BackupCopyEnabled,CloudConnectEnabled

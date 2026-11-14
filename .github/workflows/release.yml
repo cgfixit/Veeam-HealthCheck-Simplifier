@@ -1,0 +1,244 @@
+# ==============================================================================
+# Release — wheel + sdist, Windows app bundle, container image
+#   - Pull requests: build and smoke-test every artifact; publish nothing.
+#   - Tags v*.*.*: verify the tag matches vhc_simplifier.__version__, then create a
+#     DRAFT GitHub Release (wheel, sdist, Windows zip, SHA256SUMS) with build
+#     provenance attestations, and push the image to ghcr.io.
+# Every install uses constraints.txt, the same pins CI and the Dockerfile use.
+# ==============================================================================
+
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+    paths:
+      - vhc_simplifier.py
+      - docker_entrypoint.py
+      - pyproject.toml
+      - constraints.txt
+      - MANIFEST.in
+      - Dockerfile
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Wheel + sdist ────────────────────────────────────────────────────
+  dist:
+    name: "Wheel + sdist"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Read package version
+        id: version
+        run: |
+          version=$(python -c "import re, pathlib; print(re.search(r'^__version__ = \"(.+)\"$', pathlib.Path('vhc_simplifier.py').read_text(encoding='utf-8'), re.M).group(1))")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match vhc_simplifier.__version__ ($version)"
+            exit 1
+          fi
+
+      - name: Install pinned build tooling
+        run: |
+          python -m pip install --upgrade "pip>=26.2"
+          python -m pip install -c constraints.txt --group release
+
+      - name: Build wheel and sdist
+        run: python -m build --no-isolation --outdir dist .
+
+      - name: Smoke-test the wheel in a clean virtual environment
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install -c constraints.txt dist/*.whl
+          "$RUNNER_TEMP/wheel-venv/bin/vhc-simplifier" --version
+          "$RUNNER_TEMP/wheel-venv/bin/vhc-simplifier" --demo --quiet --output-dir "$RUNNER_TEMP/wheel-out"
+          for f in remediation_summary.md fixit.ps1 tickets.json; do test -s "$RUNNER_TEMP/wheel-out/$f"; done
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Windows app bundle (PyInstaller one-folder; no Python needed) ────
+  bundle-windows:
+    name: "Windows bundle"
+    runs-on: windows-latest
+    needs: dist
+    timeout-minutes: 20
+    env:
+      VERSION: ${{ needs.dist.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install pinned bundler and the package
+        shell: bash
+        run: |
+          python -m pip install --upgrade "pip>=26.2"
+          python -m pip install -c constraints.txt --group release
+          python -m pip install -c constraints.txt --build-constraint constraints.txt .
+
+      - name: Freeze with PyInstaller
+        shell: bash
+        env:
+          PYTHONHASHSEED: "1"
+        run: >
+          pyinstaller --noconfirm --clean --onedir --name vhc-simplifier
+          --exclude-module tkinter
+          --distpath dist --workpath build/pyinstaller --specpath build/pyinstaller
+          vhc_simplifier.py
+
+      - name: Add license notices for bundled components
+        shell: bash
+        run: |
+          python - dist/vhc-simplifier <<'EOF'
+          import importlib.metadata as md, pathlib, shutil, sys
+          out = pathlib.Path(sys.argv[1], "licenses")
+          out.mkdir()
+          shutil.copy("LICENSE.md", out / "vhc-simplifier-LICENSE.md")
+          python_license = pathlib.Path(sys.base_prefix, "LICENSE.txt")
+          if python_license.is_file():
+              shutil.copy(python_license, out / "python-LICENSE.txt")
+          else:
+              print(f"::warning::CPython license not found at {python_license}")
+          for name in ("pandas", "numpy", "python-dateutil", "tzdata"):
+              files = [
+                  f for f in md.distribution(name).files or []
+                  if f.parts[0].endswith(".dist-info") and f.parts[1:2] == ("licenses",)
+              ]
+              if not files:
+                  sys.exit(f"No dist-info license files for bundled dependency {name}")
+              for f in files:
+                  target = out.joinpath(name, *f.parts[2:])
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy(f.locate(), target)
+          EOF
+          cp README.md dist/vhc-simplifier/
+
+      - name: Smoke-test the frozen executable
+        shell: bash
+        run: |
+          test "$(./dist/vhc-simplifier/vhc-simplifier.exe --version | tr -d '\r')" = "vhc-simplifier $VERSION"
+          ./dist/vhc-simplifier/vhc-simplifier.exe --demo --quiet --output-dir "$RUNNER_TEMP/bundle-out"
+          for f in remediation_summary.md fixit.ps1 tickets.json; do test -s "$RUNNER_TEMP/bundle-out/$f"; done
+
+      - name: Zip the bundle
+        shell: pwsh
+        run: Compress-Archive -Path dist/vhc-simplifier -DestinationPath "vhc-simplifier-$env:VERSION-windows-x64.zip"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: bundle-windows
+          path: vhc-simplifier-*-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  # ── Container image → ghcr.io (tags only) ────────────────────────────
+  image:
+    name: "Container image"
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: dist
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.dist.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and run the container regressions
+        run: |
+          docker build -t vhc-simplifier:release .
+          VHC_TEST_IMAGE=vhc-simplifier:release python3 tests/test_container.py
+
+      - name: Push to ghcr.io
+        id: push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag vhc-simplifier:release "$image:$VERSION"
+          docker push "$image:$VERSION"
+          if [[ "$VERSION" != *-* ]]; then
+            docker tag vhc-simplifier:release "$image:latest"
+            docker push "$image:latest"
+          fi
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$image:$VERSION")
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-name: ${{ steps.push.outputs.image }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  # ── Draft GitHub Release (tags only) ─────────────────────────────────
+  publish:
+    name: "Draft GitHub Release"
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [dist, bundle-windows, image]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Write SHA256SUMS
+        working-directory: release
+        run: sha256sum -- * | tee SHA256SUMS
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: |
+            release/*.whl
+            release/*.tar.gz
+            release/*.zip
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" release/*
+          --repo "$GITHUB_REPOSITORY" --verify-tag --draft
+          --title "$GITHUB_REF_NAME" --generate-notes

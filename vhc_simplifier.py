@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Veeam Health Check Simplifier - v4.1 (demo-ready)
+Veeam Health Check Simplifier
 
 CSV (default) or JSON input. Graceful when files are missing.
---demo mode uses embedded sample data from real VHC exports.
+--demo mode uses embedded sample data shaped like VHC exports.
 
-Requires Python 3.12+  (tested on 3.12 and 3.13)
+Requires Python 3.12+  (tested on 3.12, 3.13 and 3.14)
 
 python vhc_simplifier.py --demo
 python vhc_simplifier.py --demo --sf-account-id 001...   # credential error expected without creds
@@ -29,6 +29,8 @@ from itertools import repeat
 from typing import Any
 
 import pandas as pd
+
+__version__ = "4.2.0"
 
 logger = logging.getLogger("vhc_simplifier")
 
@@ -557,26 +559,38 @@ def analyze_repositories(repo_df):
     return findings
 
 
+def _malware_verdict(df: pd.DataFrame, col: str) -> pd.Series:
+    text = df[col].astype(str).str.lower()
+    return text.str.contains("infected", regex=False, na=False) | text.str.contains(
+        "suspicious", regex=False, na=False
+    )
+
+
 def analyze_malware(malware_df):
     findings: list[str] = []
     if malware_df is None:
         return findings
     if "Status" not in malware_df.columns:
         return findings
-    status_text = malware_df["Status"].astype(str).str.lower()
-    mask = status_text.str.contains("infected", regex=False, na=False) | status_text.str.contains(
-        "suspicious", regex=False, na=False
-    )
+    # Veeam documents Status as the event severity, but VHC's own v13 baselines carry the
+    # verdict in Type; accept either unless Status explicitly marks the event clean.
+    verdicts = malware_df["Status"]
+    mask = _malware_verdict(malware_df, "Status")
+    if "Type" in malware_df.columns:
+        clean = malware_df["Status"].astype(str).str.strip().str.casefold() == "clean"
+        type_only = _malware_verdict(malware_df, "Type") & ~mask & ~clean
+        verdicts = verdicts.where(~type_only, malware_df["Type"])
+        mask |= type_only
     flagged = malware_df.loc[mask]
     object_names = flagged["ObjectName"] if "ObjectName" in flagged.columns else repeat(None, len(flagged))
     detection_times = (
         flagged["DetectionTime"] if "DetectionTime" in flagged.columns else repeat(None, len(flagged))
     )
-    for object_name, status, detection_time in zip(
-        object_names, flagged["Status"], detection_times, strict=False
+    for object_name, verdict, detection_time in zip(
+        object_names, verdicts.loc[mask], detection_times, strict=False
     ):
         findings.append(
-            f"Malware event: {_str_cell(object_name)} - {_str_cell(status)} at {_str_cell(detection_time)}"
+            f"Malware event: {_str_cell(object_name)} - {_str_cell(verdict)} at {_str_cell(detection_time)}"
         )
     return findings
 
@@ -713,13 +727,15 @@ def write_markdown(enriched, sections, out_path, notes=None):
         lines += [
             f"### {it['severity']} - {it['category']}",
             f"**Finding:** {_md_escape(it['raw'])}",
+            "",
             f"**Impact:** {it['explain']}",
         ]
         if it["cmd"]:
             lines += ["", "```powershell", it["cmd"], "```"]
         if it["kb"]:
-            lines.append(f"[KB / Docs]({it['kb']})")
-        lines.append("---")
+            lines += ["", f"[KB / Docs]({it['kb']})"]
+        # A blank line keeps "---" a thematic break instead of a setext heading underline.
+        lines += ["", "---"]
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
 
@@ -868,7 +884,7 @@ def _post_slack_summary(enriched, webhook, result):
 
 
 def _print_console_report(result: HealthCheckResult) -> None:
-    print("\n# Veeam Health Check Summary (v4.1)\n")
+    print(f"\n# Veeam Health Check Summary (v{__version__})\n")
     for section, items in result.sections.items():
         print(f"## {section}")
         for f in items or []:
@@ -1037,8 +1053,9 @@ def run_healthcheck(
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        description="Veeam Health Check Simplifier v4.1 - CSV/JSON + demo + graceful degradation"
+        description=f"Veeam Health Check Simplifier v{__version__} - CSV/JSON + demo + graceful degradation"
     )
+    p.add_argument("--version", action="version", version=f"vhc-simplifier {__version__}")
     p.add_argument("--input-dir", default=".", help="Directory with CSV/JSON files")
     p.add_argument("--output-dir", default=".", help="Where to write artifacts")
     p.add_argument("--input-format", choices=["csv", "json"], default="csv")

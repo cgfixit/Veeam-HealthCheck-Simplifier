@@ -25,12 +25,10 @@ GitHub.
 
 ## 2. Codex wiring
 
-Verify all six source skills, six namespaced discovery entrypoints, and six thin
-compatibility command wrappers exist:
+Verify all six source skills and six thin compatibility command wrappers exist:
 
 ```powershell
 Get-ChildItem .codex\skills -Directory
-Get-ChildItem .agents\skills -Directory
 Get-ChildItem .codex\commands -File -Filter *.md |
     Where-Object Name -ne README.md
 rg -n "^name:|^description:" .codex\skills
@@ -40,9 +38,8 @@ Get-Content .codex\README.md
 
 Requirements:
 
-- each source skill and discovery entrypoint contains one valid `SKILL.md`;
-- every discovery entrypoint has a unique lowercase name matching its folder
-  and routes to the matching authoritative `.codex/skills/` workflow;
+- each source skill contains one valid `SKILL.md` whose lowercase `name`
+  matches its folder;
 - wrappers point to the matching skill and do not duplicate its procedure;
 - `AGENTS.md` contains repo facts, while personal tone and generic safety stay
   in account settings;
@@ -92,12 +89,13 @@ permissions and CLI token scopes as separate evidence.
 Search current docs and tests for stale claims before publishing guidance:
 
 ```powershell
-rg -n 'encoding_errors="replace"|analyze_sessions|--verbose|219 tests|Six workflows|HTML/JSON|12\.3\.2\.4643' README.md SECURITY.md CLAUDE.md .claude tests .codex AGENTS.md
+rg -n 'encoding_errors="replace"|analyze_sessions|--verbose|219 tests|Six workflows|Seven GitHub Actions|HTML/JSON|12\.3\.2\.4643' README.md SECURITY.md .claude tests .codex AGENTS.md
 ```
 
 Verify against current code rather than replacing numbers mechanically:
 
-- `pyproject.toml` owns Python/package/test configuration;
+- `pyproject.toml` owns Python/package/test configuration and dependency ranges;
+  `constraints.txt` owns exact pins, and `vhc_simplifier.__version__` owns the version;
 - `EXPECTED_BASENAMES` has five inputs; `run_healthcheck()` emits four sections;
 - sessions are analyzed inside `analyze_jobs()`;
 - synthetic VBR/Windows fixtures are not live compatibility evidence;

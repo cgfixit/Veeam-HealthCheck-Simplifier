@@ -6,6 +6,12 @@
 #   ./output      -> /app/output  (read-write) generated remediation artifacts
 #                                               (remediation_summary.md, fixit.ps1, tickets.json).
 #
+# One-shot (default):  docker compose up --build
+# Scheduled:           CRON_SCHEDULE="0 6 * * *" VHC_RESTART=unless-stopped docker compose up -d --build
+#
+# Restart stays "no" unless VHC_RESTART is set: restarting a one-shot run would repeat
+# it in a loop, re-posting Slack summaries and duplicating Salesforce Tasks.
+#
 # Real VHC export data and generated artifacts must never be committed to this
 # repo — both directories are covered by .gitignore.
 
@@ -14,13 +20,16 @@ services:
     build: .
     image: vhc-simplifier:local
     container_name: vhc-simplifier
-    restart: unless-stopped
+    restart: ${VHC_RESTART:-no}
     environment:
       SF_USERNAME: ${SF_USERNAME:-}
       SF_PASSWORD: ${SF_PASSWORD:-}
       SF_TOKEN: ${SF_TOKEN:-}
+      VHC_SLACK_WEBHOOK: ${VHC_SLACK_WEBHOOK:-}
       # Optional standard five-field cron expression; empty runs the CLI once.
       CRON_SCHEDULE: ${CRON_SCHEDULE:-}
+      # Optional IANA zone for CRON_SCHEDULE, e.g. America/New_York; empty uses UTC.
+      TZ: ${VHC_TZ:-}
     volumes:
       - ./vhc-exports:/app/input:ro
       - ./output:/app/output

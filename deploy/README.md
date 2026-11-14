@@ -16,19 +16,18 @@ sudo mkdir -p /var/lib/vhc-simplifier/input /var/lib/vhc-simplifier/output
 sudo mkdir -p /etc/vhc-simplifier
 sudo chown -R vhc:vhc /var/lib/vhc-simplifier
 
-# 3. Set up a venv and install dependencies
+# 3. Create a venv and install the package with the tested pins (run from the repo root).
+#    /opt/vhc-simplifier stays root-owned, so the service user cannot modify its own code.
 sudo python3 -m venv /opt/vhc-simplifier/venv
-sudo /opt/vhc-simplifier/venv/bin/pip install -r requirements.txt
+sudo /opt/vhc-simplifier/venv/bin/pip install -c constraints.txt .
+#    Optional integrations: pip install -c constraints.txt ".[integrations]"
+#    From a release instead: pip install -c constraints.txt vhc_simplifier-<version>-py3-none-any.whl
 
-# 4. Copy the application
-sudo cp vhc_simplifier.py /opt/vhc-simplifier/
-sudo chown -R vhc:vhc /opt/vhc-simplifier
-
-# 5. Install the systemd units
+# 4. Install the systemd units
 sudo cp deploy/vhc-simplifier.service deploy/vhc-simplifier.timer /etc/systemd/system/
 sudo cp deploy/logrotate/vhc-simplifier /etc/logrotate.d/
 
-# 6. Enable and start the timer
+# 5. Enable and start the timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now vhc-simplifier.timer
 ```
