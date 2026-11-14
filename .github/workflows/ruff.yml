@@ -26,11 +26,11 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install Ruff
-        run: pip install --no-cache-dir ruff==0.15.20
+      - name: Install Ruff (version pinned in constraints.txt)
+        run: pip install --no-cache-dir -c constraints.txt ruff
 
       - name: Ruff lint check
-        run: ruff check --output-format=github vhc_simplifier.py docker_entrypoint.py tests/
+        run: ruff check --output-format=github .
 
       - name: Ruff format check
-        run: ruff format --check vhc_simplifier.py docker_entrypoint.py tests/
+        run: ruff format --check .

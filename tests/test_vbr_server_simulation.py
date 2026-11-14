@@ -2,7 +2,7 @@
 
 Uses the shared conftest.py fixtures to simulate realistic VBR health-check
 exports (CSV and JSON) as produced by https://vee.am/vhc2 on Windows Server
-hosts running Veeam Backup & Replication v12.3.2 (build 12.3.2.4643)
+hosts running Veeam Backup & Replication v12.3.2 (simulated, not build-specific)
 and v13 (latest).
 
 These tests validate the full analysis pipeline — loader → analyzer →

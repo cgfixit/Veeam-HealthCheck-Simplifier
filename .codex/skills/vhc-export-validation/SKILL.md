@@ -18,7 +18,8 @@ the owning analyzer. Keep discovery and decoding centralized.
 | `repositories` | `localhost_Repositories` | `analyze_repositories()` |
 | `malware` | `localhostmalware_events` | `analyze_malware()` |
 
-The resolver accepts hostname-prefixed variants. Preserve exact-name priority.
+Upstream VHC writes `<VBRServer>_malware_events.csv`; the resolver accepts that and
+other hostname-prefixed variants. Preserve exact-name priority.
 If multiple fuzzy candidates can represent different VBR hosts or runs, do not
 silently broaden the matcher or depend on alphabetical selection; make the
 ambiguity explicit and test it.

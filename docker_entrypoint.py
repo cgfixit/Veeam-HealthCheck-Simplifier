@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import signal
@@ -10,7 +11,6 @@ import sys
 import threading
 import time
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cronsim import CronSim, CronSimError
@@ -80,8 +80,16 @@ def run_scheduled(command: list[str], expression: str) -> int:
     return 0
 
 
+def cli_path() -> str:
+    # The image installs the package into site-packages; a checkout keeps it beside this file.
+    spec = importlib.util.find_spec("vhc_simplifier")
+    if spec is None or not spec.origin:
+        raise SystemExit("vhc_simplifier is not installed")
+    return spec.origin
+
+
 def main() -> int:
-    command = [sys.executable, str(Path(__file__).with_name("vhc_simplifier.py")), *sys.argv[1:]]
+    command = [sys.executable, cli_path(), *sys.argv[1:]]
     expression = os.environ.get("CRON_SCHEDULE", "")
     if not expression:
         os.execv(sys.executable, command)
