@@ -1,12 +1,12 @@
 # Veeam Health Check Simplifier
 
-**v4.1.0** — a security-focused VBR pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for optimizations, fixes, security hardening, compliance gaps, and generates safe, reviewable remediation artifacts.
+**v4.2.0** — a security-focused VBR pipeline that ingests [Veeam Health Check](https://vee.am/vhc2) exports from Veeam Backup & Replication (VBR) servers, analyzes them for optimizations, fixes, security hardening, compliance gaps, and generates safe, reviewable remediation artifacts.
 
 ---
 
 ## What is the Veeam Health Check?
 
-The [Veeam Health Check (VHC)](https://vee.am/vhc2) is a PowerShell-based diagnostic script that runs against a Veeam Backup & Replication server on Windows. It exports CSV and JSON files covering:
+The [Veeam Health Check (VHC)](https://github.com/VeeamHub/veeam-healthcheck) is a free, community-supported VeeamHub tool: a Windows .NET application whose collectors run Veeam PowerShell cmdlets against a Veeam Backup & Replication server. It writes CSV files (by default under `C:\temp\vHC\Original\VBR\<server>\<timestamp>\`) covering:
 
 - **Jobs** — backup job configuration (retention, encryption, schedules)
 - **Sessions** — recent job run results (success, failure, warnings)
@@ -14,14 +14,21 @@ The [Veeam Health Check (VHC)](https://vee.am/vhc2) is a PowerShell-based diagno
 - **Repositories** — backup storage targets and immutability support
 - **Malware Events** — inline scan, YARA rule, and entropy detection results
 
-This project takes those raw exports and transforms them into actionable remediation guidance — no manual spreadsheet review required.
+This project takes those raw exports and transforms them into actionable remediation guidance — no manual spreadsheet review required. JSON input is an alternate, API-shaped record format (for example VBR REST API output), not something VHC itself writes.
 
 ### Supported VBR Versions
 
 | VBR Version | Build | Windows Server | Status |
 |---|---|---|---|
-| v12.3.2 | 12.3.2.4643 | 2016, 2019, 2022, 2025 | Simulated VHC fixture coverage |
-| v13 | 13.0.x fixture target | 2019, 2022, 2025 | Simulated VHC fixture coverage |
+| v12.3.2 | 12.3.2.x fixture target (latest: 12.3.2.4934, P4) | 2016, 2019, 2022, 2025 | Simulated VHC fixture coverage |
+| v13 | 13.x fixture target (latest: 13.1.2.57) | 2019, 2022, 2025 | Simulated VHC fixture coverage |
+
+Latest builds per Veeam's [build table (KB2680)](https://www.veeam.com/kb2680), checked 2026-11-14. The
+fixtures are simulations and are not tied to a specific build.
+
+File names and the analyzed columns were cross-checked against the upstream VHC collector
+source and its VBR v13 golden-baseline CSVs (VeeamHub/veeam-healthcheck `d403bea`, 2026-11-02).
+That is upstream evidence about the export format, not a test against a live VBR server.
 
 ---
 
@@ -58,7 +65,7 @@ This project takes those raw exports and transforms them into actionable remedia
    - `analyze_jobs(jobs_df, sessions_df)` — retention, encryption, and recent session failures (there is no separate `analyze_sessions()`)
    - `analyze_security()` — best-practice compliance status
    - `analyze_repositories()` — immutability support gaps
-   - `analyze_malware()` — infected/suspicious scan results
+   - `analyze_malware()` — infected/suspicious events, read from `Status` (Veeam documents it as the event severity) or from `Type` (where VHC's own v13 baselines carry the verdict), unless `Status` is `Clean`
 3. **Enrich** — `enrich_findings()` pattern-matches each finding to a PowerShell remediation command with KB article links, applying `_ps_quote()` injection guards
 4. **Write** — `_write_artifact()` wrapper isolates IO errors per-file:
    - `remediation_summary.md` — human-readable report with severity, PS snippets, and KB links
@@ -71,7 +78,7 @@ This project takes those raw exports and transforms them into actionable remedia
 ## Features
 
 - **Multi-format input** — CSV (default, from [vee.am/vhc2](https://vee.am/vhc2)) or JSON (VBR REST API exports)
-- **Demo mode** — runs instantly with embedded real-world sample data; no input files required
+- **Demo mode** — runs instantly with embedded sample data; no input files required
 - **Secure PowerShell output** — mutating cmdlets (`Set-`, `New-`, `Remove-`, etc.) include `-WhatIf` by default; several remediations (storage encryption, retention, immutability) are review-only comments, not mutating cmdlets
 - **PS injection prevention** — object names with control characters are refused, not interpolated
 - **Salesforce integration** — creates Tasks on an Account record for High/Medium findings
@@ -92,25 +99,60 @@ This project takes those raw exports and transforms them into actionable remedia
 
 ---
 
-## Requirements
+## Installation
 
-- Python 3.12+ (tested on 3.12 and 3.13); package version **4.1.0** (`pyproject.toml`)
-- `pandas` (core dependency)
-- `simple-salesforce` *(optional — only for `--sf-account-id`)*
-- `httpx` *(optional — Slack fallback uses stdlib `urllib` if absent)*
-- `pytest`, `pytest-cov`, `ruff` *(dev/testing only)*
+Pick the option that matches where the exports are:
+
+| Where you run it | Install | Needs Python |
+|---|---|---|
+| Windows Server / admin workstation, no Python allowed | Windows bundle zip from [Releases](https://github.com/cgfixit/Veeam-HealthCheck-Simplifier/releases) | No |
+| Any machine with Python 3.12+ | Release wheel via `pipx` / `uv tool`, or `pip` with `constraints.txt` | Yes |
+| Linux automation host / scheduled runs | Container image (`ghcr.io`) or `docker compose` | No (Docker) |
+| Development | Clone + `pip install -r requirements.txt` | Yes |
+
+**Windows bundle (no Python).** Download `vhc-simplifier-<version>-windows-x64.zip`, check it against
+`SHA256SUMS` (and optionally `gh attestation verify <zip> --repo cgfixit/Veeam-HealthCheck-Simplifier`),
+unzip, and run `vhc-simplifier\vhc-simplifier.exe --input-dir C:\temp\vHC\Original\VBR\<server>\<timestamp>`.
+It is a PyInstaller one-folder build with its own CPython, pandas, and numpy, plus their license notices in
+`licenses\`. It includes the core CLI and Slack posting (stdlib `urllib`); Salesforce Task creation needs the
+`salesforce` extra from a Python install. The executable is not code-signed, so SmartScreen or application
+control policies may require an allow rule.
+
+**Wheel.** `pipx install vhc_simplifier-<version>-py3-none-any.whl` (or `uv tool install <wheel>`) puts
+`vhc-simplifier` on your PATH. For the exact tested dependency versions, install into a venv with the
+constraints file: `pip install -c constraints.txt vhc_simplifier-<version>-py3-none-any.whl`.
+
+### Dependency layout
+
+| File | Role |
+|---|---|
+| `pyproject.toml` | Source of truth: runtime dependency ranges, extras, release tooling group, version (read from `vhc_simplifier.__version__`) |
+| `constraints.txt` | Exact pins for every package on Python 3.12+ and all platforms, generated by `uv pip compile --universal`; used by CI, the Dockerfile, and the release build |
+| `requirements.txt` | Development shortcut: `-c constraints.txt` plus an editable install with all extras |
+
+| Extra / group | Adds |
+|---|---|
+| *(core)* | `pandas` |
+| `salesforce` | `simple-salesforce` *(only for `--sf-account-id`)* |
+| `slack` | `httpx` *(optional — Slack falls back to stdlib `urllib`)* |
+| `integrations` | both of the above |
+| `container` | `cronsim`, used only by `docker_entrypoint.py` |
+| `dev` | `container` + `pytest`, `pytest-cov`, `ruff` |
+| `release` *(PEP 735 group)* | `build`, `setuptools`, `pyinstaller` |
 
 ```bash
-# Core + optional integrations + dev tools (matches requirements.txt)
+# Development checkout: package (editable) + all extras, pinned
 pip install -r requirements.txt
 
-# From a clone, slimmer extras defined in pyproject.toml:
-#   pip install -e ".[salesforce]"     # simple-salesforce
-#   pip install -e ".[slack]"          # httpx
-#   pip install -e ".[integrations]"   # both
-#   pip install -e ".[dev]"            # pytest, pytest-cov, ruff
-# After `pip install -e .`, the console script `vhc-simplifier` calls main().
+# Only what you need, still pinned
+pip install -c constraints.txt ".[salesforce]"
+
+# Regenerate pins after changing pyproject.toml (Dependabot also updates them weekly)
+uv pip compile pyproject.toml --all-extras --group pyproject.toml:release --universal \
+  --python-version 3.12 -o constraints.txt
 ```
+
+Python 3.12+ is required (CI tests 3.12, 3.13, and 3.14; the container image uses 3.14).
 
 ---
 
@@ -118,7 +160,10 @@ pip install -r requirements.txt
 
 ```bash
 # Demo mode (no files needed — uses embedded sample data)
-python vhc_simplifier.py --demo
+python vhc_simplifier.py --demo        # or: vhc-simplifier --demo  (after installing)
+
+# Show the installed version
+python vhc_simplifier.py --version
 
 # Real CSV export from a VBR server (run vee.am/vhc2 on Windows first)
 python vhc_simplifier.py --input-dir ./vhc-exports --output-dir ./results
@@ -148,11 +193,14 @@ python vhc_simplifier.py --input-dir ./vhc-exports --no-artifacts
 ## Running in Docker
 
 ```bash
-# Build the image
+# Build the image (or pull a release: docker pull ghcr.io/cgfixit/veeam-healthcheck-simplifier:<version>)
 docker build -t vhc-simplifier .
 
-# Run once (demo mode, same as the CI smoke test)
-docker run --rm vhc-simplifier --demo --quiet --no-artifacts
+# Behind a TLS-inspecting proxy, pass its CA as a build secret (never stored in a layer)
+docker build --secret id=pip_ca,src=corp-ca.pem -t vhc-simplifier .
+
+# Run once (demo mode, console report only)
+docker run --rm vhc-simplifier --demo --no-artifacts
 
 # Run once against real exports
 docker run --rm \
@@ -174,9 +222,11 @@ docker run -d --name vhc-simplifier \
   vhc-simplifier --input-dir /app/input --output-dir /app/output
 ```
 
-The container runs as the non-root `vhc` user in both modes. The scheduler writes no crontab,
+The container runs as the non-root `vhc` user (UID 1000) in both modes; the installed application
+code is root-owned and read-only to it. The scheduler writes no crontab,
 PID file, or spool; only the output mount and temporary scratch space need to be writable.
-Ensure the output mount is writable by the image's `vhc` UID. With `CRON_SCHEDULE` unset or
+Ensure the output mount is writable by UID 1000. With no arguments the image runs the demo and
+writes artifacts to `/app/output`. With `CRON_SCHEDULE` unset or
 empty, the entrypoint replaces itself with the CLI and preserves its exit status.
 
 Scheduling accepts five fields with lists, ranges, steps, and month/weekday names. Invalid
@@ -195,7 +245,7 @@ Review existing expressions that combine both day fields when upgrading.
 The Python runner uses a cron parser with no transitive dependencies, avoiding a custom cron grammar.
 Debian `cron` adds daemon/spool and privilege assumptions; Supercronic is container-friendly
 but adds an architecture-specific native binary. The application itself remains a single-file
-CLI and does not require `cronsim` when installed from `pyproject.toml` without development extras.
+CLI and does not require `cronsim` unless installed with the `container` or `dev` extra.
 
 The base image is pinned by digest and checked weekly by Dependabot. Trivy retains full
 SARIF reports, including unfixed upstream findings, and separately fails CI on fixable
@@ -210,9 +260,11 @@ separate kernel is required. The image retains its shell and OS libraries, but r
 `infocmp` executable and strips set-user-ID/set-group-ID permissions from regular files. The
 application does not need privileged login, password-changing, or mount tools. Custom image
 builds that install additional packages should repeat this hardening after installation.
-Pip is removed after installing runtime dependencies, including its unused vendored packages.
-To add optional integrations, include them in the Dockerfile's dependency-install step when
-building a custom image; package installation is not part of container startup.
+The image installs the package itself (`pyproject.toml` with the `container` extra) using the
+pins in `constraints.txt` for both runtime and build dependencies, the same pins CI and the
+release use; pip is then removed, including its unused vendored packages. To add optional
+integrations in a custom image, change `"/tmp/src[container]"` to, for example,
+`"/tmp/src[container,salesforce]"`; package installation is not part of container startup.
 
 ### Remaining container HIGH findings
 
@@ -254,6 +306,7 @@ the libacl fix changes its ABI and Debian has deferred the Perl update pending r
 | `--input-dir` | `.` | Directory containing VHC export files |
 | `--output-dir` | `.` | Directory for generated artifacts |
 | `--input-format` | `csv` | Input format: `csv` or `json` |
+| `--version` | — | Print `vhc-simplifier <version>` and exit |
 | `--demo` | off | Use embedded sample data (no files needed) |
 | `--no-artifacts` | off | Skip writing `.md`/`.ps1`/`.json` files |
 | `--quiet` | off | Suppress the default console report (`run_healthcheck(verbose=)` is the Python API; there is no `--verbose` flag) |
@@ -268,7 +321,7 @@ the libacl fix changes its ABI and Debian has deferred the Perl update pending r
 
 ## Expected Input Files
 
-These files are produced by running the [Veeam Health Check script](https://vee.am/vhc2) on a Windows Server with VBR installed:
+These files are produced by running [Veeam Health Check](https://github.com/VeeamHub/veeam-healthcheck) on a Windows Server with VBR installed. VHC prefixes most files with the VBR server name it collected from (`localhost` for a local run); `VeeamSessionReport.csv` has no prefix:
 
 | Data | CSV filename | JSON filename |
 |---|---|---|
@@ -276,9 +329,9 @@ These files are produced by running the [Veeam Health Check script](https://vee.
 | Sessions | `VeeamSessionReport.csv` | `VeeamSessionReport.json` |
 | Security | `localhost_SecurityCompliance.csv` | `localhost_SecurityCompliance.json` |
 | Repositories | `localhost_Repositories.csv` | `localhost_Repositories.json` |
-| Malware | `localhostmalware_events.csv` | `localhostmalware_events.json` |
+| Malware | `localhost_malware_events.csv` | `localhost_malware_events.json` |
 
-All files are optional — missing files are logged and skipped without aborting. Exact `localhost_*` names are the VHC defaults; hostname-prefixed variants (for example `VBR01_Jobs.csv`) are also discovered.
+All files are optional — missing files are logged and skipped without aborting. Hostname-prefixed variants (for example `VBR01_Jobs.csv` or `vbr01.lab.local_malware_events.csv`) are discovered, as is the older `localhostmalware_events.csv` spelling. Point `--input-dir` at one server's timestamp folder so exports from different servers are never mixed.
 
 ---
 
@@ -316,24 +369,27 @@ A `docker-compose.yml` is provided to build and run the CLI in a container witho
 mkdir -p vhc-exports output
 # copy your VHC export files into ./vhc-exports
 docker compose up --build
+
+# Scheduled: keep the container running and restart it with the Docker daemon
+CRON_SCHEDULE="0 6 * * *" VHC_TZ=America/New_York VHC_RESTART=unless-stopped docker compose up -d --build
 ```
 
-This mounts `./vhc-exports` read-only to `/app/input` and `./output` read-write to `/app/output`, and runs `vhc_simplifier.py --input-dir /app/input --output-dir /app/output --quiet`. Override the default command for other flags, e.g. Salesforce or Slack integration:
+This mounts `./vhc-exports` read-only to `/app/input` and `./output` read-write to `/app/output`, and runs `vhc-simplifier --input-dir /app/input --output-dir /app/output --quiet`. The restart policy is `no` unless `VHC_RESTART` is set: restarting a one-shot run would repeat it in a loop (re-posting Slack summaries and creating duplicate Salesforce Tasks), so only set it together with `CRON_SCHEDULE`. Override the default command for other flags, e.g. Salesforce or Slack integration:
 
 ```bash
+VHC_SLACK_WEBHOOK=https://hooks.slack.com/services/T00/B00/xxx \
 docker compose run --rm vhc-simplifier \
   --input-dir /app/input --output-dir /app/output \
-  --sf-account-id 001XXXXXXXXXXXX \
-  --slack-webhook https://hooks.slack.com/services/T00/B00/xxx
+  --sf-account-id 001XXXXXXXXXXXX
 ```
 
-Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) are passed through from the host environment or a `.env` file — never bake them into the image. The `Dockerfile` installs `pandas` and the container-only `cronsim` parser: Slack posting uses stdlib `urllib` when `httpx` is absent, and Salesforce Task creation needs `simple-salesforce`, which is not in the image. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
+Salesforce credentials (`SF_USERNAME`, `SF_PASSWORD`, `SF_TOKEN`) and `VHC_SLACK_WEBHOOK` are passed through from the host environment or a `.env` file — never bake them into the image. The image installs the package with the `container` extra only: Slack posting uses stdlib `urllib` when `httpx` is absent, and Salesforce Task creation needs the `salesforce` extra, which is not in the image. Behind a TLS-inspecting proxy, build first with `docker build --secret id=pip_ca,src=corp-ca.pem -t vhc-simplifier:local .`, then run `docker compose up` without `--build`. Neither `./vhc-exports` nor `./output` should ever be committed; both are covered by `.gitignore`.
 
 ---
 
 ## Testing
 
-The test suite collects **278** tests across 5 modules plus shared fixtures in `conftest.py` (CI `--cov-fail-under=80`):
+The test suite collects **313** tests across 8 modules plus shared fixtures in `conftest.py` (CI `--cov-fail-under=80`). The 5 tests in `test_container.py` run only against a built image (`VHC_TEST_IMAGE`); CI's Docker job and the release workflow run them:
 
 | Test File | Purpose |
 |---|---|
@@ -342,6 +398,9 @@ The test suite collects **278** tests across 5 modules plus shared fixtures in `
 | `test_vbr_server_simulation.py` | VBR v12.3.2 and v13 mock server simulation with realistic export data |
 | `test_windows_server_env.py` | Windows paths, encoding (BOM, UTF-16), PowerShell injection, server version matrix |
 | `test_mock_veeam_environment.py` | Full mock VBR environments with file-level fault injection |
+| `test_docker_entrypoint.py` | Container scheduler: cron parsing, DST, signal forwarding, exit codes (no Docker needed) |
+| `test_container.py` | Built-image checks: non-root, read-only rootfs, capabilities, CVE boundaries, scheduled runs |
+| `test_pyproject_metadata.py` | Packaging metadata: SPDX license, single-sourced version, every dependency pinned in `constraints.txt` |
 | `conftest.py` | Shared fixtures with realistic VBR v12 and v13 CSV/JSON export data |
 
 ```bash
@@ -353,31 +412,45 @@ python -m pytest tests/ -v --cov=vhc_simplifier --cov-report=term-missing
 
 # Run VBR server simulation tests only
 python -m pytest tests/test_vbr_server_simulation.py -v
+
+# Container checks against a locally built image
+docker build -t vhc-simplifier:ci . && VHC_TEST_IMAGE=vhc-simplifier:ci python tests/test_container.py
 ```
 
 ---
 
 ## CI/CD Workflows
 
-Seven GitHub Actions workflows live in `.github/workflows/`. CI, Ruff, Gitleaks, DevSkim, CodeQL, and Trivy run on push and pull request to `main` (Gitleaks, DevSkim, CodeQL, and Trivy also run weekly). Dependency Review runs on pull requests only.
+Eight GitHub Actions workflows live in `.github/workflows/`. CI, Ruff, Gitleaks, DevSkim, CodeQL, and Trivy run on push and pull request to `main` (Gitleaks, DevSkim, CodeQL, and Trivy also run weekly). Dependency Review runs on pull requests only. Release builds on pull requests that touch packaging and publishes on `v*.*.*` tags.
 
 | Workflow | File | Purpose |
 |---|---|---|
-| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13 on ubuntu + windows), 80% coverage threshold, scheduled/standard Docker checks under non-root and read-only restrictions |
+| **CI** | `ci.yml` | Lint + test matrix (Python 3.12/3.13/3.14 on ubuntu + windows) installed from `constraints.txt`, 80% coverage threshold, CLI exit-code checks, scheduled/standard Docker checks under non-root and read-only restrictions |
 | **Ruff** | `ruff.yml` | Python lint and format checks |
 | **Gitleaks** | `gitleaks.yml` | Secret scanning (push, PR, weekly) |
 | **DevSkim** | `devskim.yml` | Microsoft security anti-pattern detection (push, PR, weekly) |
 | **CodeQL** | `codeql.yml` | GitHub static analysis (push, PR, weekly) |
 | **Dependency Review** | `dependency-review.yml` | Supply chain vulnerability checks on PRs |
 | **Trivy** | `trivy.yml` | Filesystem + image scans; full SARIF reports and a fixable HIGH/CRITICAL gate (push, PR, weekly) |
+| **Release** | `release.yml` | Wheel + sdist, Windows PyInstaller bundle, and image, each smoke-tested; on tags: draft GitHub Release with `SHA256SUMS`, build provenance attestations, and a `ghcr.io` push |
+
+### Cutting a release
+
+1. Bump `__version__` in `vhc_simplifier.py` (the only place the version lives) and merge to `main`.
+2. Tag the merge commit: `git tag v<version> && git push origin v<version>`. The workflow fails if the
+   tag does not match `__version__`.
+3. Review the draft release the workflow creates, then publish it. The image is pushed to
+   `ghcr.io/cgfixit/veeam-healthcheck-simplifier:<version>` (and `:latest` for non-prerelease tags);
+   a new GHCR package may need its visibility set to public once in the package settings.
 
 ---
 
 ## Deployment
 
-Two deployment options are available:
+Deployment options:
 
-- **Docker** — build and run via the included `Dockerfile`.
+- **Release downloads** — the Windows bundle or the wheel; see [Installation](#installation).
+- **Docker** — build and run via the included `Dockerfile`, or pull the release image from `ghcr.io`.
 - **Host-native (systemd)** — for operators who don't want Docker, `deploy/`
   provides a `oneshot` systemd service, a daily calendar timer, and a
   `logrotate` config for the log output. See [`deploy/README.md`](deploy/README.md)
@@ -432,6 +505,7 @@ Input (CSV / JSON / --demo)
 - **Clean runs still write artifacts.** A run with zero findings overwrites `remediation_summary.md`, `fixit.ps1`, and `tickets.json` so stale output from a previous run never looks current.
 - **Salesforce.** The account ID must be a 15- or 18-character alphanumeric ID. Task creation failures are counted per task (partial writes are reported, not hidden). Passing `--sf-password`/`--sf-token` on the command line logs a warning.
 - **Slack webhook validation.** Only `https://hooks.slack.com/...` and `https://hooks.slack-gov.com/...` URLs are accepted.
+- **Release integrity.** Each release lists `SHA256SUMS`, and the wheel, sdist, Windows zip, and container image carry GitHub build provenance attestations (`gh attestation verify <file> --repo cgfixit/Veeam-HealthCheck-Simplifier`). The Windows executable is unsigned.
 - **Service accounts & MFA.** Automation accounts used by this tool (Salesforce, Slack, and any scripted VBR REST API access) can't complete interactive MFA challenges — see [SECURITY.md](SECURITY.md#service-account--mfa-considerations) for guidance on scoping non-interactive credentials safely.
 
 ---

@@ -9,7 +9,7 @@ Type=oneshot
 User=vhc
 Group=vhc
 EnvironmentFile=-/etc/vhc-simplifier/env
-ExecStart=/opt/vhc-simplifier/venv/bin/python /opt/vhc-simplifier/vhc_simplifier.py --input-dir /var/lib/vhc-simplifier/input --output-dir /var/lib/vhc-simplifier/output --quiet
+ExecStart=/opt/vhc-simplifier/venv/bin/vhc-simplifier --input-dir /var/lib/vhc-simplifier/input --output-dir /var/lib/vhc-simplifier/output --quiet
 
 # Logging: append to a real log file (for logrotate) in addition to journald.
 LogsDirectory=vhc-simplifier

@@ -4,10 +4,11 @@
 #   - Concurrency groups (cancel stale PR runs, preserve main history)
 #   - SHA-pinned actions (supply-chain hardening)
 #   - Selective pip caching via cache-dependency-path
-#   - Cross-platform matrix (ubuntu + windows) x (Python 3.12 + 3.13)
+#   - One dependency source: pyproject.toml ranges pinned by constraints.txt
+#   - Cross-platform matrix (ubuntu + windows) x (Python 3.12 + 3.13 + 3.14)
 #   - Timeout bounds to prevent hung runners
 #   - Coverage artifact upload with retention
-#   - Ruff lint + format integrated (replaces standalone ruff.yml)
+#   - Ruff lint + format (also run standalone by ruff.yml)
 # ==============================================================================
 
 name: CI
@@ -41,27 +42,31 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             requirements.txt
+            constraints.txt
             pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install --no-cache-dir ruff==0.15.20
+          pip check
 
       - name: Ruff lint check
-        run: ruff check --output-format=github vhc_simplifier.py docker_entrypoint.py tests/
+        run: ruff check --output-format=github .
 
       - name: Ruff format check
-        run: ruff format --check vhc_simplifier.py docker_entrypoint.py tests/
+        run: ruff format --check .
 
       - name: Check syntax and import errors
-        run: ruff check --select=E9,F63,F7,F82 --output-format=full vhc_simplifier.py docker_entrypoint.py tests/
+        run: ruff check --select=E9,F63,F7,F82 --output-format=full .
 
-      - name: Verify module imports cleanly
-        run: python -c "import vhc_simplifier; print('Module loaded successfully')"
+      - name: Verify module imports cleanly and version is single-sourced
+        run: >
+          python -c "import importlib.metadata as m, vhc_simplifier as v;
+          assert m.version('vhc-simplifier') == v.__version__, (m.version('vhc-simplifier'), v.__version__);
+          print('vhc-simplifier', v.__version__)"
 
-  # ── Test matrix (ubuntu + windows x Python 3.12 + 3.13) ─────────────
+  # ── Test matrix (ubuntu + windows x Python 3.12 + 3.13 + 3.14) ──────
   test:
     name: "Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
@@ -71,7 +76,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
@@ -82,13 +87,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: |
             requirements.txt
+            constraints.txt
             pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest pytest-cov
 
       - name: Run full test suite with coverage
         run: >
@@ -112,10 +117,15 @@ jobs:
           test -f "$tmpdir/fixit.ps1" || { echo "Missing PowerShell artifact"; exit 1; }
           test -f "$tmpdir/tickets.json" || { echo "Missing tickets artifact"; exit 1; }
 
-      - name: Verify invalid format rejected
+      - name: Verify CLI exit codes for invalid input
         shell: bash
         run: |
-          python vhc_simplifier.py --input-format csv --quiet --no-artifacts --input-dir /nonexistent 2>&1 || true
+          set +e
+          python vhc_simplifier.py --input-format xml --quiet --no-artifacts
+          test $? -eq 2 || { echo "Unsupported --input-format was not rejected"; exit 1; }
+          python vhc_simplifier.py --quiet --no-artifacts --input-dir ./does-not-exist
+          test $? -eq 2 || { echo "Missing input directory did not exit 2"; exit 1; }
+          vhc-simplifier --version
 
       - name: Upload coverage report
         if: always()

@@ -4,7 +4,7 @@ Guides improvements to encoding, fault isolation, test coverage, and CI for the 
 
 ## Encoding & Data Robustness
 
-- Always use `encoding_errors="replace"` when calling `pd.read_csv()`.
+- Keep `encoding_errors="strict"` in `pd.read_csv()` and try `_candidate_encodings()`; never use `"replace"`, which hides corrupt input.
 - Strip UTF-8 BOM (`﻿`) from JSON before parsing.
 - Guard against missing DataFrame columns before accessing them.
 - Use `_str_cell()`, `_to_number()`, `_to_bool()` for type-safe cell access.
@@ -26,6 +26,6 @@ Guides improvements to encoding, fault isolation, test coverage, and CI for the 
 
 ## CI Pipeline
 
-- Python 3.12 and 3.13 matrix on ubuntu-latest and windows-latest.
+- Python 3.12, 3.13, and 3.14 matrix on ubuntu-latest and windows-latest, installed from `constraints.txt`.
 - Ruff lint + format checks must pass.
 - Run `ruff check --fix` and `ruff format` before committing.

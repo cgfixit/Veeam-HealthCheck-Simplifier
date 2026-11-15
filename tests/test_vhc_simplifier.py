@@ -197,6 +197,23 @@ def test_analyze_malware_flags_infected_and_handles_missing_column():
     assert vhc.analyze_malware(pd.DataFrame([{"ObjectName": "x"}])) == []
 
 
+def test_analyze_malware_reads_verdict_from_type_column_in_vhc_v13_layout():
+    # Column order matches VHC's CMalwareEvents (Get-VBRMalwareDetectionEvent export).
+    malware = pd.DataFrame(
+        [
+            ["VM-A", "2024-02-15T14:30:00", "Infected", "Created", "Active"],
+            ["VM-B", "2024-02-15T14:31:00", "Clean", "Created", "Active"],
+            ["VM-C", "2024-02-15T14:32:00", "InlineScan", "Created", "Suspicious"],
+            ["VM-D", "2024-02-15T14:33:00", "Infected", "Resolved", "Clean"],
+        ],
+        columns=["ObjectName", "DetectionTime", "Type", "State", "Status"],
+    )
+    assert vhc.analyze_malware(malware) == [
+        "Malware event: VM-A - Infected at 2024-02-15T14:30:00",
+        "Malware event: VM-C - Suspicious at 2024-02-15T14:32:00",
+    ]
+
+
 def test_analyzers_return_empty_for_none():
     vhc.HealthCheckResult()
     assert vhc.analyze_security(None) == []
@@ -294,6 +311,17 @@ def test_write_markdown_creates_file(tmp_path):
     out = vhc.write_markdown(enriched, sections, tmp_path / "summary.md")
     assert out.exists()
     assert "Remediation Summary" in out.read_text()
+
+
+def test_write_markdown_separators_never_become_setext_headings(tmp_path):
+    # Text directly above "---" turns it into an <h2> underline in CommonMark/GitHub rendering.
+    enriched = vhc.enrich_findings(["Job 'Alpha' missing storage encryption.", "unknown info-level line"])
+    lines = vhc.write_markdown(enriched, {}, tmp_path / "summary.md").read_text().splitlines()
+    separators = [i for i, line in enumerate(lines) if line == "---"]
+    assert len(separators) == 2
+    assert all(lines[i - 1] == "" for i in separators)
+    finding = next(i for i, line in enumerate(lines) if line.startswith("**Finding:**"))
+    assert lines[finding + 1] == "" and lines[finding + 2].startswith("**Impact:**")
 
 
 # ------------------------------------
@@ -637,3 +665,11 @@ def test_log_file_flag_persists_warnings(tmp_path, monkeypatch):
                 root.removeHandler(h)
                 h.close()
     assert "Data quality: localhost_Repositories.csv" in log.read_text(encoding="utf-8")
+
+
+def test_version_flag_reports_module_version(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["vhc-simplifier", "--version"])
+    with pytest.raises(SystemExit) as exit_info:
+        vhc.main()
+    assert exit_info.value.code == 0
+    assert capsys.readouterr().out.strip() == f"vhc-simplifier {vhc.__version__}"

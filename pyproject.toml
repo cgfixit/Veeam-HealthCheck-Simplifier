@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=84.1.0", "wheel>=0.46.2"]
+requires = ["setuptools>=84.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "vhc-simplifier"
-version = "4.1.0"
+dynamic = ["version"]
 description = "Veeam Health Check Simplifier — processes VBR Health Check exports into remediation artifacts"
 readme = "README.md"
 license = "MIT"
@@ -19,12 +19,18 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: System :: Systems Administration",
 ]
 
 dependencies = [
     "pandas>=2.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/cgfixit/Veeam-HealthCheck-Simplifier"
+Issues = "https://github.com/cgfixit/Veeam-HealthCheck-Simplifier/issues"
+Releases = "https://github.com/cgfixit/Veeam-HealthCheck-Simplifier/releases"
 
 [project.optional-dependencies]
 salesforce = [
@@ -48,8 +54,12 @@ slack = [
 integrations = [
     "vhc-simplifier[salesforce,slack]",
 ]
+# Scheduler used only by docker_entrypoint.py; the CLI never imports it.
+container = [
+    "cronsim>=2.7",
+]
 dev = [
-    "cronsim==2.7",
+    "vhc-simplifier[container]",
     "pytest>=9.0.3",
     "pytest-cov>=5.0.0",
     "ruff>=0.15.0",
@@ -58,8 +68,19 @@ dev = [
 [project.scripts]
 vhc-simplifier = "vhc_simplifier:main"
 
+# Release tooling (PEP 735): not package metadata, pinned through constraints.txt.
+[dependency-groups]
+release = [
+    "build>=1.2.2",
+    "setuptools>=84.1.0",
+    "pyinstaller>=6.22.0",
+]
+
 [tool.setuptools]
 py-modules = ["vhc_simplifier"]
+
+[tool.setuptools.dynamic]
+version = { attr = "vhc_simplifier.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

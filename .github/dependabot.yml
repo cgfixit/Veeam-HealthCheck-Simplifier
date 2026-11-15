@@ -4,10 +4,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # Updates the exact pins in constraints.txt (referenced by requirements.txt) and the
+  # ranges in pyproject.toml. Routine bumps arrive as one grouped PR; security
+  # updates still open individually.
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    groups:
+      python-dependencies:
+        applies-to: version-updates
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     schedule:

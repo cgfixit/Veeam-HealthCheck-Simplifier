@@ -2,14 +2,14 @@
 
 ## Supported Versions
 
-This project is a single-script utility (`vhc_simplifier.py`) and does not follow a versioned release cycle. Security fixes are applied to the **latest commit on `main`** only.
+This project is a single-module utility (`vhc_simplifier.py`). Releases are tagged `vX.Y.Z` and ship a wheel, sdist, Windows bundle, and container image. Security fixes land on `main` first and ship in the next release.
 
-| State               | Supported          |
-| ------------------- | ------------------ |
-| Latest (`main`)     | :white_check_mark: |
-| Any prior commit    | :x:                |
+| State                         | Supported          |
+| ----------------------------- | ------------------ |
+| Latest release and `main`     | :white_check_mark: |
+| Older releases / commits      | :x:                |
 
-> **Recommendation:** Always pull the latest version from `main` before running in production environments.
+> **Recommendation:** Run the latest release (or `main`), and verify downloads against the release's `SHA256SUMS` or with `gh attestation verify <file> --repo cgfixit/Veeam-HealthCheck-Simplifier`.
 
 ---
 
@@ -20,7 +20,7 @@ This tool parses and summarizes Veeam Health Check CSV/JSON exports. Security co
 - **Path traversal / arbitrary file read** — malicious input file paths passed to the script
 - **Unsafe deserialization** — processing of crafted/malformed Veeam report files
 - **Credential exposure** — accidental logging or surfacing of sensitive data present in Veeam reports (e.g., repository names, job credentials, server hostnames)
-- **Dependency vulnerabilities** — issues in packages listed in `requirements.txt`
+- **Dependency vulnerabilities** — issues in packages declared in `pyproject.toml` and pinned in `constraints.txt` (including those bundled into the Windows executable and container image)
 - **Code injection** — any vector allowing execution of unintended code via report content
 
 Out of scope: vulnerabilities in Veeam Backup & Replication itself, or issues requiring physical/administrative access to the host running this script.
@@ -65,11 +65,11 @@ These are best-effort targets for a solo-maintained open-source project. Complex
 
 ## Dependency Security
 
-Dependencies are tracked in [`requirements.txt`](./requirements.txt). It is recommended to:
+Dependency ranges are declared in [`pyproject.toml`](./pyproject.toml); every installed version is pinned in [`constraints.txt`](./constraints.txt), which CI, the Dockerfile, and the release builds all use. Dependabot proposes pin updates weekly. To audit the pins locally:
 
 ```bash
-pip install --upgrade -r requirements.txt
-pip-audit -r requirements.txt   # requires pip-audit
+pip install pip-audit
+pip-audit -r constraints.txt --no-deps --disable-pip
 ```
 
 Report any known CVEs in listed packages using the process above.
